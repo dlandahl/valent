@@ -1,0 +1,7 @@
+0.7
+2020.2
+Oct 13 2023
+20:47:58
+C:/Users/Dominik Landahl/riscv/riscv.sim/sim_1/behav/xsim/glbl.v,1697210495,verilog,,,,glbl,,uvm,,,,,,
+C:/Users/Dominik Landahl/riscv/riscv.srcs/sim_1/new/processor_tb.sv,1701445477,systemVerilog,,,,processor_tb,,uvm,,,,,,
+C:/Users/Dominik Landahl/riscv/riscv.srcs/sources_1/new/risc.v,1701713467,systemVerilog,,C:/Users/Dominik Landahl/riscv/riscv.srcs/sim_1/new/processor_tb.sv,,Block_Ram;risc,,uvm,,,,,,

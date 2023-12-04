@@ -1,0 +1,7 @@
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/Dominik Landahl/riscv/riscv.srcs/sources_1/new/risc.v" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module Block_Ram
+INFO: [VRFC 10-311] analyzing module risc
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/Dominik Landahl/riscv/riscv.srcs/sim_1/new/processor_tb.sv" into library xil_defaultlib
+INFO: [VRFC 10-311] analyzing module processor_tb
+WARNING: [VRFC 10-3380] identifier 'test_0' is used before its declaration [C:/Users/Dominik Landahl/riscv/riscv.srcs/sim_1/new/processor_tb.sv:9]
+WARNING: [VRFC 10-3380] identifier 'test_1' is used before its declaration [C:/Users/Dominik Landahl/riscv/riscv.srcs/sim_1/new/processor_tb.sv:10]

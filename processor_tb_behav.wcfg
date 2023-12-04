@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wave_config>
+   <wave_state>
+   </wave_state>
+   <db_ref_list>
+      <db_ref path="processor_tb_behav.wdb" id="1">
+         <top_modules>
+            <top_module name="glbl" />
+            <top_module name="processor_tb" />
+         </top_modules>
+      </db_ref>
+   </db_ref_list>
+   <zoom_setting>
+      <ZoomStartTime time="593.000 ns"></ZoomStartTime>
+      <ZoomEndTime time="894.259 ns"></ZoomEndTime>
+      <Cursor1Time time="705.263 ns"></Cursor1Time>
+   </zoom_setting>
+   <column_width_setting>
+      <NameColumnWidth column_width="284"></NameColumnWidth>
+      <ValueColumnWidth column_width="166"></ValueColumnWidth>
+   </column_width_setting>
+   <WVObjectSize size="32" />
+   <wvobject type="divider" fp_name="divider54">
+      <obj_property name="label">testbench</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/reset" type="logic">
+      <obj_property name="ElementShortName">reset</obj_property>
+      <obj_property name="ObjectShortName">reset</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/ram/clk" type="logic">
+      <obj_property name="DisplayName">label</obj_property>
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+      <obj_property name="label">RAM clk</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/ram/addr" type="array">
+      <obj_property name="ElementShortName">addr[31:0]</obj_property>
+      <obj_property name="ObjectShortName">addr[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="divider" fp_name="divider57">
+      <obj_property name="label">processor</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/clk" type="logic">
+      <obj_property name="ElementShortName">clk</obj_property>
+      <obj_property name="ObjectShortName">clk</obj_property>
+      <obj_property name="CustomSignalColor">#00FFFF</obj_property>
+      <obj_property name="UseCustomSignalColor">true</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/ram/data_out" type="array">
+      <obj_property name="ElementShortName">data_out[7:0]</obj_property>
+      <obj_property name="ObjectShortName">data_out[7:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/ram_data32" type="array">
+      <obj_property name="ElementShortName">ram_data32[31:0]</obj_property>
+      <obj_property name="ObjectShortName">ram_data32[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/current_stage" type="array">
+      <obj_property name="ElementShortName">current_stage[2:0]</obj_property>
+      <obj_property name="ObjectShortName">current_stage[2:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/inst" type="array">
+      <obj_property name="ElementShortName">inst[31:0]</obj_property>
+      <obj_property name="ObjectShortName">inst[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/last_inst" type="array">
+      <obj_property name="ElementShortName">last_inst[31:0]</obj_property>
+      <obj_property name="ObjectShortName">last_inst[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/pc" type="array">
+      <obj_property name="ElementShortName">pc[31:0]</obj_property>
+      <obj_property name="ObjectShortName">pc[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/gpr[0]" type="array">
+      <obj_property name="ElementShortName">[0][31:0]</obj_property>
+      <obj_property name="ObjectShortName">[0][31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/gpr[1]" type="array">
+      <obj_property name="ElementShortName">[1][31:0]</obj_property>
+      <obj_property name="ObjectShortName">[1][31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/gpr[2]" type="array">
+      <obj_property name="ElementShortName">[2][31:0]</obj_property>
+      <obj_property name="ObjectShortName">[2][31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/gpr[3]" type="array">
+      <obj_property name="ElementShortName">[3][31:0]</obj_property>
+      <obj_property name="ObjectShortName">[3][31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/gpr[4]" type="array">
+      <obj_property name="ElementShortName">[4][31:0]</obj_property>
+      <obj_property name="ObjectShortName">[4][31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/gpr" type="array">
+      <obj_property name="ElementShortName">gpr[0:31][31:0]</obj_property>
+      <obj_property name="ObjectShortName">gpr[0:31][31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/op_param_a" type="array">
+      <obj_property name="ElementShortName">op_param_a[31:0]</obj_property>
+      <obj_property name="ObjectShortName">op_param_a[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/op_param_b" type="array">
+      <obj_property name="ElementShortName">op_param_b[31:0]</obj_property>
+      <obj_property name="ObjectShortName">op_param_b[31:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/alu_result" type="array">
+      <obj_property name="ElementShortName">alu_result[31:0]</obj_property>
+      <obj_property name="ObjectShortName">alu_result[31:0]</obj_property>
+   </wvobject>
+   <wvobject type="divider" fp_name="divider56">
+      <obj_property name="label">decode</obj_property>
+      <obj_property name="DisplayName">label</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/opcode" type="array">
+      <obj_property name="ElementShortName">opcode[6:0]</obj_property>
+      <obj_property name="ObjectShortName">opcode[6:0]</obj_property>
+      <obj_property name="Radix">BINARYRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/rd" type="array">
+      <obj_property name="ElementShortName">rd[4:0]</obj_property>
+      <obj_property name="ObjectShortName">rd[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/rs1" type="array">
+      <obj_property name="ElementShortName">rs1[4:0]</obj_property>
+      <obj_property name="ObjectShortName">rs1[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/rs2" type="array">
+      <obj_property name="ElementShortName">rs2[4:0]</obj_property>
+      <obj_property name="ObjectShortName">rs2[4:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/funct" type="array">
+      <obj_property name="ElementShortName">funct[2:0]</obj_property>
+      <obj_property name="ObjectShortName">funct[2:0]</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/imm_i" type="array">
+      <obj_property name="ElementShortName">imm_i[31:0]</obj_property>
+      <obj_property name="ObjectShortName">imm_i[31:0]</obj_property>
+      <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/imm_s" type="array">
+      <obj_property name="ElementShortName">imm_s[31:0]</obj_property>
+      <obj_property name="ObjectShortName">imm_s[31:0]</obj_property>
+      <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/imm_b" type="array">
+      <obj_property name="ElementShortName">imm_b[31:0]</obj_property>
+      <obj_property name="ObjectShortName">imm_b[31:0]</obj_property>
+      <obj_property name="Radix">HEXRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/imm_u" type="array">
+      <obj_property name="ElementShortName">imm_u[31:0]</obj_property>
+      <obj_property name="ObjectShortName">imm_u[31:0]</obj_property>
+      <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+   </wvobject>
+   <wvobject fp_name="/processor_tb/processor/imm_j" type="array">
+      <obj_property name="ElementShortName">imm_j[31:0]</obj_property>
+      <obj_property name="ObjectShortName">imm_j[31:0]</obj_property>
+      <obj_property name="Radix">UNSIGNEDDECRADIX</obj_property>
+   </wvobject>
+</wave_config>
