@@ -2,12 +2,12 @@
 `timescale 1ns / 1ps
 
 module Block_Ram (
-    input clk,
-    input wr_en,
-    input [31:0] addr,
-    input [7:0] data_in,
-    output reg [7:0] data_out,
-    output reg [31:0] data_out32
+    input             clk,
+    input             wr_en,
+    input [1:0]       write_width,
+    input [31:0]      data_in,
+    input [31:0]      addr,
+    output reg [31:0] data_out
   );
 
     reg [7:0] memory [0:'h1000];
@@ -17,15 +17,19 @@ module Block_Ram (
     end
 
     always @ (posedge clk) begin
-        if (wr_en == 1)
-            memory[addr] <= data_in;
+        if (wr_en == 1) begin
+            memory[addr] <= data_in[7:0];
+            if (write_width > 0) memory[addr+1] <= data_in[15:8];
+            if (write_width > 1) begin
+                memory[addr+2] <= data_in[23:16];
+                memory[addr+3] <= data_in[31:24];
+            end
+        end
 
-        data_out <= memory[addr];
-
-        data_out32 <= { 
-            memory[addr + 3], 
-            memory[addr + 2],
-            memory[addr + 1],
+        data_out <= { 
+            memory[addr+3], 
+            memory[addr+2],
+            memory[addr+1],
             memory[addr]
         };
     end
@@ -34,8 +38,7 @@ endmodule
 module risc (
     input clk,
     input reset,
-    output reg [0:0] led,
-    output reg [31:0] data_out
+    output reg [15:0] led
   );
 
     integer i;
@@ -46,11 +49,15 @@ module risc (
     reg [WORD_SIZE-1:0] gpr [0:GPR_COUNT-1];
     reg [WORD_SIZE-1:0] pc;
 
-    reg [31:0] ram_data32;
-    reg [7:0] ram_data;
+    assign led = gpr[13][15:0];
+
+    reg [31:0] ram_data;
+    reg [31:0] ram_data_in;
+    reg [1:0]  ram_write_width;
+    reg        ram_wr_en;
     reg [WORD_SIZE-1:0] ram_addr;
 
-    Block_Ram ram(.clk(clk), .data_out(ram_data), .data_out32(ram_data32), .addr(ram_addr));
+    Block_Ram ram(.clk(clk), .data_out(ram_data), .data_in(ram_data_in), .addr(ram_addr), .write_width(ram_write_width), .wr_en(ram_wr_en));
 
     reg [2:0] current_stage;
 
@@ -58,23 +65,21 @@ module risc (
     parameter STAGE_DECODE = 1;
     parameter STAGE_EXECUTE = 2;
     parameter STAGE_MEMORY = 3;
+    parameter STAGE_WRITEBACK = 4;
 
+    parameter OPCODE_AUIPC  = 7'b00_101_11;
+    parameter OPCODE_LUI    = 7'b01_101_11;
     parameter OPCODE_LOAD   = 7'b00_000_11;
     parameter OPCODE_STORE  = 7'b01_000_11;
-    parameter OPCODE_BRANCH = 7'b11_000_11;
     parameter OPCODE_OP_IMM = 7'b00_100_11;
     parameter OPCODE_OP     = 7'b01_100_11;
-    parameter OPCODE_JAL    = 7'b11_011_11;
+    parameter OPCODE_BRANCH = 7'b11_000_11;
     parameter OPCODE_JALR   = 7'b11_001_11;
+    parameter OPCODE_JAL    = 7'b11_011_11;
 
     reg [WORD_SIZE-1:0] inst;
     reg [WORD_SIZE-1:0] last_inst;
-    assign inst = (current_stage == STAGE_DECODE) ? ram_data32 : last_inst;
-    assign inst = (current_stage == STAGE_DECODE) ? ram_data32 : last_inst;
-    assign inst = (current_stage == STAGE_DECODE) ? ram_data32 : last_inst;
-    assign inst = (current_stage == STAGE_DECODE) ? ram_data32 : last_inst;
-    assign inst = (current_stage == STAGE_DECODE) ? ram_data32 : last_inst;
-    assign inst = (current_stage == STAGE_DECODE) ? ram_data32 : last_inst;
+    assign inst = (current_stage == STAGE_DECODE) ? ram_data : last_inst;
 
     wire [6:0] opcode = inst[6:0];
     wire [4:0] rd     = inst[11:7];
@@ -85,7 +90,7 @@ module risc (
     wire [WORD_SIZE-1:0] imm_i = { { 21{inst[31]} }, inst[30:20] };
     wire [WORD_SIZE-1:0] imm_s = { { 21{inst[31]} }, inst[30:25], inst[11:7] };
     wire [WORD_SIZE-1:0] imm_b = { { 20{inst[31]} }, inst[7], inst[30:25], inst[11:8], 1'b0 };
-    wire [WORD_SIZE-1:0] imm_u = { inst[31:12], 13'b0 };
+    wire [WORD_SIZE-1:0] imm_u = { inst[31:12], 12'b0 };
     wire [WORD_SIZE-1:0] imm_j = { { 12{inst[31]} }, inst[19:12], inst[20], inst[30:25], inst[24:21], 1'b0 };
 
     reg [WORD_SIZE-1:0] op_param_a;
@@ -102,6 +107,23 @@ module risc (
     parameter FUNCT_OP_OR      = 3'b110;
     parameter FUNCT_OP_AND     = 3'b111;
 
+    parameter FUNCT_BRANCH_BEQ  = 3'b000;
+    parameter FUNCT_BRANCH_BNE  = 3'b001;
+    parameter FUNCT_BRANCH_BLT  = 3'b010;
+    parameter FUNCT_BRANCH_BGE  = 3'b011;
+    parameter FUNCT_BRANCH_BLTU = 3'b100;
+    parameter FUNCT_BRANCH_BGEU = 3'b101;
+
+    parameter FUNCT_LOAD_LB   = 3'b000;
+    parameter FUNCT_LOAD_LH   = 3'b001;
+    parameter FUNCT_LOAD_LW   = 3'b010;
+    parameter FUNCT_LOAD_LBU  = 3'b100;
+    parameter FUNCT_LOAD_LHU  = 3'b101;
+
+    parameter FUNCT_STORE_SB   = 3'b000;
+    parameter FUNCT_STORE_SH   = 3'b001;
+    parameter FUNCT_STORE_SW   = 3'b010;
+
     reg [WORD_SIZE-1:0] alu_result;
 
     always @ (*) begin
@@ -117,18 +139,7 @@ module risc (
             FUNCT_OP_OR:      alu_result      =  op_param_a |   op_param_b;
             FUNCT_OP_AND:     alu_result      =  op_param_a &   op_param_b;
         endcase
-    end
 
-    reg [11:0] branch_offset;
-
-    parameter FUNCT_BRANCH_BEQ  = 3'b000;
-    parameter FUNCT_BRANCH_BNE  = 3'b001;
-    parameter FUNCT_BRANCH_BLT  = 3'b010;
-    parameter FUNCT_BRANCH_BGE  = 3'b011;
-    parameter FUNCT_BRANCH_BLTU = 3'b100;
-    parameter FUNCT_BRANCH_BGEU = 3'b101;
-
-    always @ (*) begin
         if (opcode == OPCODE_BRANCH) case (funct)
             FUNCT_BRANCH_BEQ:   alu_result = op_param_a == op_param_b;
             FUNCT_BRANCH_BNE:   alu_result = op_param_a != op_param_b;
@@ -154,10 +165,11 @@ module risc (
 
         case (current_stage)
           STAGE_FETCH: begin
+            pc <= pc + 4;
           end
 
           STAGE_DECODE: begin
-            last_inst <= ram_data32;
+            last_inst <= ram_data;
 
             op_param_a <= gpr[rs1];
             op_param_b <= gpr[rs2];
@@ -167,30 +179,118 @@ module risc (
           end
 
           STAGE_EXECUTE: begin
-            if (opcode == OPCODE_OP_IMM || opcode == OPCODE_OP)
-                gpr[rd] <= alu_result;
+            case (opcode)
+              OPCODE_LUI:
+                  gpr[rd] <= imm_u;
 
-            else if (opcode == OPCODE_BRANCH) begin
-                if (alu_result) pc <= $signed(pc + imm_b - 4);
-            end
+              OPCODE_AUIPC:
+                  gpr[rd] <= imm_u + pc;
 
-            else if (opcode == OPCODE_JAL) begin
-                pc <= $signed(pc + imm_j - 4);
-                gpr[rd] <= pc + 4;
-            end
+              OPCODE_OP_IMM, OPCODE_OP:
+                  gpr[rd] <= alu_result;
 
-            else if (opcode == OPCODE_JALR) begin
-                pc <= $signed(pc + imm_i + op_param_a - 4);
-                gpr[rd] <= pc + 4;
-            end
+              OPCODE_BRANCH:
+                  if (alu_result) pc <= $signed(pc + imm_b - 4);
+
+              OPCODE_JAL: begin
+                  pc <= $signed(pc + imm_j - 4);
+                  gpr[rd] <= pc + 4;
+              end
+
+              OPCODE_JALR: begin
+                  pc <= $signed(pc + imm_i + op_param_a - 4);
+                  gpr[rd] <= pc + 4;
+              end
+
+              OPCODE_LOAD:
+                  ram_addr <= op_param_a + imm_i;
+
+              OPCODE_STORE: begin
+                  ram_addr <= op_param_a + imm_s;
+                  ram_write_width <= funct;
+                  ram_wr_en <= 1;
+                  ram_data_in <= op_param_b;
+              end
+            endcase
           end
 
           STAGE_MEMORY: begin
+          end
+
+          STAGE_WRITEBACK: begin
+            ram_wr_en <= 0;
+
+            if (opcode == OPCODE_LOAD)
+                case (funct)
+                  FUNCT_LOAD_LB:  gpr[rd][7:0] <= ram_data[7:0];
+                  FUNCT_LOAD_LH:  gpr[rd] <= { { 16{ram_data[15:15]} }, ram_data[15:0] };
+                  FUNCT_LOAD_LW:  gpr[rd] <= ram_data;
+                  FUNCT_LOAD_LBU: gpr[rd] <= { 24'b0, ram_data[7:0] };
+                  FUNCT_LOAD_LHU: gpr[rd] <= { 16'b0, ram_data[15:0] };
+                endcase
+
             current_stage <= 0;
 
             ram_addr <= pc;
-            pc <= pc + 4;
           end
         endcase
     end
 endmodule
+
+
+
+
+
+
+/*
+
+RV32I
+[x] LUI
+[x] AUIPC
+[x] JAL
+[x] JALR
+[x] BEQ
+[x] BNE
+[x] BLT
+[x] BGE
+[x] BLTU
+[x] BGEU
+[x] LB
+[x] LH
+[x] LW
+[x] LBU
+[x] LHU
+[x] SB
+[x] SH
+[x] SW
+[x] ADDI
+[x] SLTI
+[x] SLTIU
+[x] XORI
+[x] ORI
+[x] ANDI
+[ ] SLLI
+[ ] SRLI
+[ ] SRAI
+[x] ADD
+[x] SUB
+[x] SLL
+[x] SLT
+[x] SLTU
+[x] XOR
+[x] SRL
+[x] SRA
+[x] OR
+[x] AND
+[ ] FENCE
+[ ] FENCE.I
+[ ] ECALL
+[ ] EBREAK
+[ ] CSRRW
+[ ] CSRRS
+[ ] CSRRC
+[ ] CSRRWI
+[ ] CSRRSI
+[ ] CSRRCI
+
+ */
