@@ -6,7 +6,10 @@ module Block_Ram (
     input [3:0]       wr_en,
     input [31:0]      data_in,
     input [31:0]      addr,
-    output reg [31:0] data_out
+    output reg [31:0] data_out,
+
+    output reg [15:0] led,
+    output reg [15:0] sw
   );
 
     reg [31:0] memory [0:'h400];
@@ -14,6 +17,9 @@ module Block_Ram (
     initial begin
        $readmemh("program.mem", memory);
     end
+
+    assign led = memory[32'40][15:0];
+    assign sw  = memory[32'40][15:0];
 
     always @ (posedge clk) begin
         if (wr_en[0]) memory[addr][7:0]   <= data_in[7:0];
@@ -28,7 +34,8 @@ endmodule
 module risc (
     input clk,
     input reset,
-    output reg [15:0] led
+    output reg [15:0] led,
+    output reg [15:0] sw,
   );
 
     integer i;
@@ -49,7 +56,14 @@ module risc (
     always @ (*) assert(ram_addr % 4 == 0);
     wire[WORD_SIZE-1:0]  ram_addr_native = ram_addr >> 2;
 
-    Block_Ram ram(.clk(clk), .data_out(ram_data), .data_in(ram_data_in), .addr(ram_addr_native), .wr_en(ram_wr_en));
+    Block_Ram ram(.clk(clk), .data_out(ram_data), .data_in(ram_data_in), .addr(ram_addr_native), .wr_en(ram_wr_en), .led(led), .sw(sw));
+
+    parameter DEVICE_MEM_LED = 32'h100;
+    parameter DEVICE_MEM_SW  = 32'h104;
+
+    always @ (posedge clk) begin
+        if
+    end
 
     reg [2:0] current_stage;
 
@@ -177,7 +191,7 @@ module risc (
                   gpr[rd] <= imm_u;
 
               OPCODE_AUIPC:
-                  gpr[rd] <= imm_u + pc;
+                  gpr[rd] <= imm_u + pc - 4;
 
               OPCODE_OP_IMM, OPCODE_OP:
                   gpr[rd] <= alu_result;
