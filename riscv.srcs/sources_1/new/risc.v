@@ -3,35 +3,25 @@
 
 module Block_Ram (
     input             clk,
-    input             wr_en,
-    input [1:0]       write_width,
+    input [3:0]       wr_en,
     input [31:0]      data_in,
     input [31:0]      addr,
     output reg [31:0] data_out
   );
 
-    reg [7:0] memory [0:'h1000];
+    reg [31:0] memory [0:'h400];
 
     initial begin
        $readmemh("program.mem", memory);
     end
 
     always @ (posedge clk) begin
-        if (wr_en == 1) begin
-            memory[addr] <= data_in[7:0];
-            if (write_width > 0) memory[addr+1] <= data_in[15:8];
-            if (write_width > 1) begin
-                memory[addr+2] <= data_in[23:16];
-                memory[addr+3] <= data_in[31:24];
-            end
-        end
+        if (wr_en[0]) memory[addr][7:0]   <= data_in[7:0];
+        if (wr_en[1]) memory[addr][15:8]  <= data_in[15:8];
+        if (wr_en[2]) memory[addr][23:16] <= data_in[23:16];
+        if (wr_en[3]) memory[addr][31:24] <= data_in[31:24];
 
-        data_out <= { 
-            memory[addr+3], 
-            memory[addr+2],
-            memory[addr+1],
-            memory[addr]
-        };
+        data_out <= memory[addr];
     end
 endmodule
 
@@ -53,11 +43,13 @@ module risc (
 
     reg [31:0] ram_data;
     reg [31:0] ram_data_in;
-    reg [1:0]  ram_write_width;
-    reg        ram_wr_en;
+    reg [3:0]  ram_wr_en;
     reg [WORD_SIZE-1:0] ram_addr;
 
-    Block_Ram ram(.clk(clk), .data_out(ram_data), .data_in(ram_data_in), .addr(ram_addr), .write_width(ram_write_width), .wr_en(ram_wr_en));
+    always @ (*) assert(ram_addr % 4 == 0);
+    wire[WORD_SIZE-1:0]  ram_addr_native = ram_addr >> 2;
+
+    Block_Ram ram(.clk(clk), .data_out(ram_data), .data_in(ram_data_in), .addr(ram_addr_native), .wr_en(ram_wr_en));
 
     reg [2:0] current_stage;
 
@@ -150,7 +142,8 @@ module risc (
         endcase
     end
 
-    wire [2:0] debug_stage = (current_stage == 0 ? 2 : (current_stage - 1));
+    wire [3:0] load_offset  = ((op_param_a + imm_i) % 4);
+    wire [3:0] store_offset = opcode == OPCODE_STORE ? ((op_param_a + imm_s) % 4) : -1;
 
     always @ (posedge clk) if (reset) begin
         current_stage <= 0;
@@ -203,13 +196,16 @@ module risc (
               end
 
               OPCODE_LOAD:
-                  ram_addr <= op_param_a + imm_i;
+                  ram_addr <= (op_param_a + imm_i) - load_offset;
 
               OPCODE_STORE: begin
-                  ram_addr <= op_param_a + imm_s;
-                  ram_write_width <= funct;
-                  ram_wr_en <= 1;
-                  ram_data_in <= op_param_b;
+                  ram_addr <= op_param_a + imm_s - store_offset;
+                  ram_wr_en <= (
+                      funct == 3'b000 ? (4'b0001 << store_offset) :
+                      funct == 3'b001 ? (4'b0011 << store_offset) :
+                      funct == 3'b010 ?  4'b1111 : 0);
+
+                  ram_data_in <= op_param_b << (8 * store_offset);
               end
             endcase
           end
@@ -222,11 +218,11 @@ module risc (
 
             if (opcode == OPCODE_LOAD)
                 case (funct)
-                  FUNCT_LOAD_LB:  gpr[rd][7:0] <= ram_data[7:0];
-                  FUNCT_LOAD_LH:  gpr[rd] <= { { 16{ram_data[15:15]} }, ram_data[15:0] };
+                  FUNCT_LOAD_LB:  gpr[rd][7:0] <= ram_data[8*load_offset +: 8];
+                  FUNCT_LOAD_LH:  gpr[rd] <= { { 16{ram_data[16 + 8 * load_offset +: 1]} }, ram_data[8*load_offset +: 16] };
                   FUNCT_LOAD_LW:  gpr[rd] <= ram_data;
-                  FUNCT_LOAD_LBU: gpr[rd] <= { 24'b0, ram_data[7:0] };
-                  FUNCT_LOAD_LHU: gpr[rd] <= { 16'b0, ram_data[15:0] };
+                  FUNCT_LOAD_LBU: gpr[rd] <= { 24'b0, ram_data[8*load_offset +: 8]  };
+                  FUNCT_LOAD_LHU: gpr[rd] <= { 16'b0, ram_data[8*load_offset +: 16] };
                 endcase
 
             current_stage <= 0;
