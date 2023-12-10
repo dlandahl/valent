@@ -4,7 +4,7 @@
 <!-- Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.                   -->
 <!-- Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.   -->
 
-<Project Product="Vivado" Version="7" Minor="65" Path="C:/Users/Dominik Landahl/riscv/riscv.xpr">
+<Project Product="Vivado" Version="7" Minor="65" Path="C:/Users/Dominik Landahl/riscv/vivado_project/riscv.xpr">
   <DefaultLaunch Dir="$PRUNDIR"/>
   <Configuration>
     <Option Name="Id" Val="93638ef0e1aa4e8890b3a2b2343528b1"/>
@@ -60,7 +60,7 @@
     <Option Name="EnableBDX" Val="FALSE"/>
     <Option Name="DSABoardId" Val="basys3"/>
     <Option Name="FeatureSet" Val="FeatureSet_Classic"/>
-    <Option Name="WTXSimLaunchSim" Val="125"/>
+    <Option Name="WTXSimLaunchSim" Val="126"/>
     <Option Name="WTModelSimLaunchSim" Val="0"/>
     <Option Name="WTQuestaLaunchSim" Val="0"/>
     <Option Name="WTIesLaunchSim" Val="0"/>
@@ -100,7 +100,7 @@
       </File>
       <File Path="$PSRCDIR/sources_1/imports/riscv_llvm/program.mem">
         <FileInfo>
-          <Attr Name="ImportPath" Val="$PPRDIR/../riscv_llvm/program.mem"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../../riscv_llvm/program.mem"/>
           <Attr Name="ImportTime" Val="1701793131"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="simulation"/>
@@ -116,7 +116,7 @@
       <Filter Type="Constrs"/>
       <File Path="$PSRCDIR/constrs_1/imports/Dominik Landahl/Basys-3-Master.xdc">
         <FileInfo>
-          <Attr Name="ImportPath" Val="$PPRDIR/../Basys-3-Master.xdc"/>
+          <Attr Name="ImportPath" Val="$PPRDIR/../../Basys-3-Master.xdc"/>
           <Attr Name="ImportTime" Val="1700825370"/>
           <Attr Name="UsedIn" Val="synthesis"/>
           <Attr Name="UsedIn" Val="implementation"/>

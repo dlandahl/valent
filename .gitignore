@@ -1,4 +1,6 @@
 
-riscv.cache
-riscv.runs
-xsim/*
+vivado_project/riscv.cache
+vivado_project/riscv.runs
+vivado_project/riscv.sim
+vivado_project/riscv.hw
+vivado_project/riscv.ip_user_files
