@@ -18,8 +18,8 @@ module Block_Ram (
        $readmemh("program.mem", memory);
     end
 
-    assign led = memory[32'40][15:0];
-    assign sw  = memory[32'40][15:0];
+    assign led = memory[64][15:0];
+    assign sw  = memory[65][15:0];
 
     always @ (posedge clk) begin
         if (wr_en[0]) memory[addr][7:0]   <= data_in[7:0];
@@ -35,7 +35,7 @@ module risc (
     input clk,
     input reset,
     output reg [15:0] led,
-    output reg [15:0] sw,
+    output reg [15:0] sw
   );
 
     integer i;
@@ -57,13 +57,6 @@ module risc (
     wire[WORD_SIZE-1:0]  ram_addr_native = ram_addr >> 2;
 
     Block_Ram ram(.clk(clk), .data_out(ram_data), .data_in(ram_data_in), .addr(ram_addr_native), .wr_en(ram_wr_en), .led(led), .sw(sw));
-
-    parameter DEVICE_MEM_LED = 32'h100;
-    parameter DEVICE_MEM_SW  = 32'h104;
-
-    always @ (posedge clk) begin
-        if
-    end
 
     reg [2:0] current_stage;
 
