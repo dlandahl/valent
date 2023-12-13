@@ -9,7 +9,7 @@ module Block_Ram (
     output reg [31:0] data_out,
 
     output reg [15:0] led,
-    output reg [15:0] sw
+    input [15:0] sw
   );
 
     reg [31:0] memory [0:'h400];
@@ -19,7 +19,7 @@ module Block_Ram (
     end
 
     assign led = memory[64][15:0];
-    assign sw  = memory[65][15:0];
+    assign memory[65][15:0] = sw;
 
     always @ (posedge clk) begin
         if (wr_en[0]) memory[addr][7:0]   <= data_in[7:0];
@@ -34,8 +34,8 @@ endmodule
 module risc (
     input clk,
     input reset,
-    output reg [15:0] led,
-    output reg [15:0] sw
+    input [15:0] sw,
+    output reg [15:0] led
   );
 
     integer i;
@@ -45,8 +45,6 @@ module risc (
 
     reg [WORD_SIZE-1:0] gpr [0:GPR_COUNT-1];
     reg [WORD_SIZE-1:0] pc;
-
-    assign led = gpr[13][15:0];
 
     reg [31:0] ram_data;
     reg [31:0] ram_data_in;
@@ -149,7 +147,7 @@ module risc (
         endcase
     end
 
-    wire [3:0] load_offset  = ((op_param_a + imm_i) % 4);
+    wire [3:0] load_offset  = (op_param_a + imm_i) % 4;
     wire [3:0] store_offset = opcode == OPCODE_STORE ? ((op_param_a + imm_s) % 4) : -1;
 
     always @ (posedge clk) if (reset) begin
@@ -190,7 +188,7 @@ module risc (
                   gpr[rd] <= alu_result;
 
               OPCODE_BRANCH:
-                  if (alu_result) pc <= $signed(pc + imm_b - 4);
+                  if (alu_result[0]) pc <= $signed(pc + imm_b - 4);
 
               OPCODE_JAL: begin
                   pc <= $signed(pc + imm_j - 4);
@@ -233,8 +231,8 @@ module risc (
                 endcase
 
             current_stage <= 0;
-
             ram_addr <= pc;
+
           end
         endcase
     end
