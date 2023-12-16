@@ -1,0 +1,101 @@
+
+Image_Data :: external;
+
+Block_Ram :: chip (depth: constant | clk: clock, wr_en: wire, address: wire[32], data: wire[8]) -> data: flipflop[8] {
+
+    memory: [depth] flipflop[8]; @Image_Data
+
+    sequential (clk) {
+        if in.wr_en == 1
+            memory[in.address] <= in.data;
+
+        out.data <= memory[in.address];
+    }
+}
+
+Vga_Format :: struct {
+    Zones :: struct {
+        video: constant;
+        front: constant;
+        sync:  constant;
+        back:  constant;
+    }
+
+    horizontal: Zones;
+    vertical: Zones;
+}
+
+end :: function (format: Vga_Format.Zones) -> constant {
+    return format.video + format.front + format.sync + format.back - 1;
+}
+
+sync_range :: function (format: Vga_Format.Zones) -> constant, constant {
+    start :: format.video + format.front - 1;
+    end   :: start + format.sync - 1;
+
+    return start, end;
+}
+
+my_circuit :: combinational (width: constant | x: wire) -> y: wire, z: wire[width*2] {
+    something: wire = x + 1;
+    y = something + 1;
+    z = width{x, y};
+}
+
+Vga_Generator :: chip (format: Vga_Format, some_circuit: combinational | clk: clock) -> (
+    vga_red:   flipflop[3],
+    vga_green: flipflop[3],
+    vga_blue:  flipflop[3],
+    hsync: flipflop,
+    vsync: flipflop) {
+
+    mcmm: Mcmm;
+
+    combinational {
+        mcmm.in.clk = in.clk;
+        vga_sig = { vga_red, vga_green, vga_blue };
+
+        a, b = some_circuit(in.clk);
+    }
+
+    h_counter: flipflop[32];
+    v_counter: flipflop[32];
+
+    vga_sig: wire[9];
+
+    delay_line: [10] flipflop[8];
+
+    sequential (in.clk) {
+        for n: 0 .. depth_of(delay_line)-1 {
+            delay_line[n+1] <= delay_line[n];
+        }
+    }
+
+    delay: flipflop[5];
+
+    sequential (in.clk) {
+        delay[0:3] <= delay[1:4];
+    }
+
+    sequential (mcmm.out.pixel_clock) {
+        using vga_format;
+
+        if h_counter == end(format.horizontal) {
+            h_counter <= 0;
+            v_counter <= v_counter + 1;
+        } else {
+            h_counter <= h_counter + 1;
+        }
+
+        if v_counter == end(format.vertical) {
+            v_counter <= 0;
+        }
+
+
+        hstart, hend :: sync_range(format.horizontal);
+        out.hsync <= h_counter < hstart || h_counter > hend;
+
+        vstart, vend :: sync_range(format.vertical);
+        out.vsync <= v_counter < vstart || v_counter > vend;
+    }
+}
