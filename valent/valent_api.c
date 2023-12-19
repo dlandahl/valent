@@ -31,12 +31,14 @@ int main() {
     };
 
     vdl_instantiate_object(simulation, "Vga_Generator", "/vga_gen", &vga_format, vdl_lookup(my_circuit));
+    vdl_object_t *clock = vdl_get_object(simulation, "/vga_gen/in.clk");
 
-    for (int i = 0; i < 100; i++) {
-        vdl_run_simulation(simulation, 5000);
+    for (int i = 0; i < 100000; i++) {
+        vdl_step_simulation(simulation);
 
-        vdl_object_t *clock = vdl_get_object(simulation, "/vga_gen/in.clk");
+        if (i % 5000 == 0)
+            vdl_logic_not(clock);
     }
 
-    const char *verilog = vdl_generate_code(ast, MHDL_CODE_VERILOG);
+    const char *verilog = vdl_generate_code(ast, VDL_CODE_VERILOG);
 }

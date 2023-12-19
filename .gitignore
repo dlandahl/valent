@@ -4,3 +4,9 @@ vivado_project/riscv.runs
 vivado_project/riscv.sim
 vivado_project/riscv.hw
 vivado_project/riscv.ip_user_files
+vivado_project/riscv_netlist.edn
+vivado_project/riscv_netlist.v
+prjxray/
+*.obj
+*.lib
+*.exp

@@ -1,9 +1,9 @@
 
 Image_Data :: external;
 
-Block_Ram :: chip (depth: constant | clk: clock, wr_en: wire, address: wire[32], data: wire[8]) -> data: flipflop[8] {
+Block_Ram :: chip (depth: constant | clk: wire, wr_en: wire, address: wire[32], data: wire[8]) -> data: flipflop[8] {
 
-    memory: [depth] flipflop[8]; @Image_Data
+    memory: flipflop[8][depth];
 
     sequential (clk) {
         if in.wr_en == 1
@@ -36,26 +36,28 @@ sync_range :: function (format: Vga_Format.Zones) -> constant, constant {
     return start, end;
 }
 
-my_circuit :: combinational (width: constant | x: wire) -> y: wire, z: wire[width*2] {
+my_circuit :: combinational (width: constant | x: wire) -> (y: wire, z: wire[width * 2]) {
     something: wire = x + 1;
     y = something + 1;
     z = width{x, y};
 }
 
-Vga_Generator :: chip (format: Vga_Format, some_circuit: combinational | clk: clock) -> (
+Vga_Generator :: chip (format: Vga_Format, some_circuit: combinational | clk: wire) -> (
     vga_red:   flipflop[3],
     vga_green: flipflop[3],
     vga_blue:  flipflop[3],
     hsync: flipflop,
     vsync: flipflop) {
 
-    mcmm: Mcmm;
+    mmcm: Mmcm;
 
     combinational {
-        mcmm.in.clk = in.clk;
+        mmcm.in.clk = in.clk;
         vga_sig = { vga_red, vga_green, vga_blue };
 
-        a, b = some_circuit(in.clk);
+        a: wire;
+        b: wire[4];
+        a, b = some_circuit(2, in.clk);
     }
 
     h_counter: flipflop[32];
@@ -63,10 +65,10 @@ Vga_Generator :: chip (format: Vga_Format, some_circuit: combinational | clk: cl
 
     vga_sig: wire[9];
 
-    delay_line: [10] flipflop[8];
+    delay_line: flipflop[8][10]; 
 
     sequential (in.clk) {
-        for n: 0 .. depth_of(delay_line)-1 {
+        for n: 0 .. delay_line.depth-1 {
             delay_line[n+1] <= delay_line[n];
         }
     }
@@ -77,7 +79,7 @@ Vga_Generator :: chip (format: Vga_Format, some_circuit: combinational | clk: cl
         delay[0:3] <= delay[1:4];
     }
 
-    sequential (mcmm.out.pixel_clock) {
+    sequential (mmcm.out.pixel_clock) {
         using vga_format;
 
         if h_counter == end(format.horizontal) {
@@ -90,7 +92,6 @@ Vga_Generator :: chip (format: Vga_Format, some_circuit: combinational | clk: cl
         if v_counter == end(format.vertical) {
             v_counter <= 0;
         }
-
 
         hstart, hend :: sync_range(format.horizontal);
         out.hsync <= h_counter < hstart || h_counter > hend;

@@ -1,0 +1,12 @@
+
+Blinky :: chip (clk: wire) -> led: flipflop {
+    counter: flipflop[19];
+
+    sequential (clk) {
+        counter <= counter + 1;
+
+        if counter == 0 {
+            led <= !led;
+        }
+    }
+};
