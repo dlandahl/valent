@@ -22,15 +22,15 @@ main :: () {
     line: int;
     lines := split(file, cast(u8) #char "\n");
 
-    for tokens {
+    if false for tokens {
         if it.line > line {
             print("\n");
             line = it.line;
         }
 
         // token_text: string;
-        // token_text.count = it.c1 - it.c0;
-        // token_text.data = lines[it.line].data + it.c0;
+        // token_text.count = it.end_char - it.start_char;
+        // token_text.data = lines[it.line].data + it.start_char;
         // print("%", token_text);
 
         if it.kind == .ERROR print("[31m");
@@ -41,15 +41,33 @@ main :: () {
         if it.kind == .ERROR print("[0m");
     }
 
-    ratio := cast(float) file.count / tokens.count;
-    print("The ratio is %\n", ratio);
-
     context.parser = .{};
     context.parser.tokens = tokens;
 
     parse();
 }
 
+Parser :: struct {
+    tokens: [] Token;
+    token_index: int;
+    top_level: [..] *Ast_Node;
+
+    block_stack: [..] Block_Type;
+
+    error: bool;
+    wanted: [] Token_Kind;
+    got: Token_Kind;
+    custom_report: string;
+    error_location: Source_Location;
+}
+
+#add_context parser: Parser;
+
+Make_Ast :: ($T: Type) -> *T {
+    node := New(T);
+    node.location = current_token().location;
+    return node;
+}
 
 Ast_Node :: struct {
     Kind :: enum {
@@ -66,6 +84,7 @@ Ast_Node :: struct {
     }
 
     kind: Kind;
+    location: Source_Location;
 }
 
 Ast_Declaration :: struct {
@@ -75,6 +94,8 @@ Ast_Declaration :: struct {
     name: string;
     type: *Ast_Node;
     value: *Ast_Node;
+
+    constant: bool;
 }
 
 Ast_Identifier :: struct {
@@ -86,6 +107,9 @@ Ast_Identifier :: struct {
 }
 
 Ast_Literal :: struct {
+    using #as node: Ast_Node;
+    node.kind = .LITERAL;
+
     type: *Datatype;
 
     union {
@@ -169,6 +193,88 @@ Ast_Type_Definition :: struct {
 }
 
 
+
+Block_Type :: enum {
+    TOP_LEVEL;
+    CHIP;
+    SEQUENTIAL;
+    COMBINATIONAL;
+    _COUNT;
+}
+
+push_block :: (block_type: Block_Type) {
+    array_add(*context.parser.block_stack, block_type);
+}
+
+pop_block :: () -> Block_Type {
+    return pop(*context.parser.block_stack);
+}
+
+check_statement_allowed_in_block :: (ast: *Ast_Node) {
+    check_statement :: (ast: *Ast_Node) -> bool, string {
+        block_type := peek(context.parser.block_stack);
+        str := stringify_statement(ast);
+
+        if block_type == {
+          case .TOP_LEVEL;
+            if ast.kind != .DECLARATION {
+                return false, "Expected a declaration at top level";
+            }
+
+            decl := cast(*Ast_Declaration) ast;
+            if !decl.constant {
+                return false, "Non-constant declaration at top level";
+            }
+
+          case .CHIP;
+          case .SEQUENTIAL;
+            if ast.kind == .IF return true, "";
+            if ast.kind == .ASSIGNMENT {
+                ass := cast(*Ast_Assignment) ast;
+                if ass.type != .SEQUENTIAL {
+                    return false, "Sequential blocks may only contain sequential assignments (<=), not combinational ones (=)";
+                }
+
+                return true, "";
+            }
+
+            return false, tprint("This kind of statement (%) is not allowed in a sequential block", str);
+        }
+
+        return true, "";
+    }
+
+    result, report := check_statement(ast);
+
+    if !result {
+        using context.parser;
+
+        error = true;
+        custom_report = report;
+        error_location = ast.location;
+    }
+}
+
+stringify_statement :: (ast: *Ast_Node) -> string {
+    if !ast return "";
+
+    if ast.kind == .SEQUENTIAL_CIRCUIT return "Sequential Block";
+    if ast.kind == .DECLARATION {
+        decl := cast(*Ast_Declaration) ast;
+        if decl.constant return "Constant Declaration";
+        return "Declaration";
+    }
+    if ast.kind == .IF return "If";
+    if ast.kind == .ASSIGNMENT {
+        ass := cast(*Ast_Assignment) ast;
+        if ass.type == .COMBINATIONAL return "Combinational Assignment";
+        return "Sequential Assignment";
+    }
+
+    assert(false);
+    return "";
+}
+
 Datatype :: struct {
     name: string;
 
@@ -201,23 +307,30 @@ Datatype :: struct {
     element_count: int;
 }
 
-
-Parser :: struct {
-    tokens: [] Token;
-    token_index: int;
-    top_level: [..] *Ast_Node;
-}
-
-#add_context parser: Parser;
-
 parse :: () {
+    push_block(.TOP_LEVEL);
+    defer pop_block();
+
     while true {
         if allow(.EOT) {
             return;
         }
 
         s := parse_statement();
+        check_statement_allowed_in_block(s);
         array_add(*context.parser.top_level, s);
+
+        if context.parser.error {
+            print("On line % character %:\n", context.parser.error_location.line+1, context.parser.error_location.start_char);
+
+            if context.parser.custom_report {
+                print("Parse error! %.\n", context.parser.custom_report);
+            } else {
+                print("Parse error! Wanted %, got %.\n", context.parser.wanted, context.parser.got);
+            }
+
+            return;
+        }
     }
 }
 
@@ -235,9 +348,12 @@ parse_statement :: () -> *Ast_Node {
             ident := expect(.IDENTIFIER);
             op := expect(.EQUALS, .SEQUENTIAL_ASSIGNMENT);
 
-            ass := New(Ast_Assignment);
-            ass.target = New(Ast_Identifier);
+            ass := Make_Ast(Ast_Assignment);
+
+            ass.target = Make_Ast(Ast_Identifier);
             ass.target.name = ident._string;
+            ass.target.location = ident.location;
+
             ass.expr = parse_expression();
             ass.type = ifx op.kind == .EQUALS then .COMBINATIONAL else .SEQUENTIAL;
 
@@ -247,21 +363,12 @@ parse_statement :: () -> *Ast_Node {
     }
 
     if allow(.KEYWORD_if) {
-        _if := New(Ast_If);
+        _if := Make_Ast(Ast_If);
         _if.condition = parse_expression();
 
-        expect(.OPEN_BRACE);
+        // An If statement inherits the block type it's in
+        _if.block = parse_block(peek(context.parser.block_stack));
 
-        block: [..] *Ast_Node;
-
-        while true {
-            if allow(.CLOSED_BRACE) break;
-
-            statement := parse_statement();
-            array_add(*block, statement);
-        }
-
-        _if.block = block;
         return _if;
     }
 
@@ -270,19 +377,46 @@ parse_statement :: () -> *Ast_Node {
         return seq;
     }
 
-    assert(false);
+    using context.parser;
+    parse_error("Wanted a statment but got token '%'", tokens[token_index].kind);
+
+    return null;
+}
+
+parse_block :: (type: Block_Type) -> [] *Ast_Node {
+    expect(.OPEN_BRACE);
+
+    push_block(type);
+    defer pop_block();
+
+    block: [..] *Ast_Node;
+
+    while true {
+        if allow(.CLOSED_BRACE) break;
+
+        statement := parse_statement();
+
+        check_statement_allowed_in_block(statement);
+        if context.parser.error break;
+
+        array_add(*block, statement);
+    }
+
+    return block;
 }
 
 parse_declaration :: () -> *Ast_Declaration {
-    decl := New(Ast_Declaration);
-
     ident := expect(.IDENTIFIER);
+
+    decl := Make_Ast(Ast_Declaration);
     decl.name = ident._string;
 
     if allow(.DOUBLE_COLON) {
         decl.value = parse_expression();
+        decl.constant = true;
     } else if allow(.COLON) {
         decl.type = parse_expression();
+        decl.constant = false;
     }
 
     return decl;
@@ -292,7 +426,7 @@ parse_expression :: () -> *Ast_Node {
     value := parse_comparison();
 
     while allow(.PLUS) {
-        op := New(Ast_Binop);
+        op := Make_Ast(Ast_Binop);
         op.operation = .ADDITION;
 
         op.left = value;
@@ -308,7 +442,7 @@ parse_comparison :: () -> *Ast_Node {
     value := parse_unary_prefix();
 
     while allow(.DOUBLE_EQUALS) {
-        op := New(Ast_Binop);
+        op := Make_Ast(Ast_Binop);
         op.operation = .EQUALS;
 
         op.left = value;
@@ -322,7 +456,7 @@ parse_comparison :: () -> *Ast_Node {
 
 parse_unary_prefix :: () -> *Ast_Node {
     if allow(.EXCLAMATION_MARK) {
-        op := New(Ast_Unary_Op);
+        op := Make_Ast(Ast_Unary_Op);
         op.parameter = parse_unary_prefix();
         op.operation = .LOGIC_NOT;
 
@@ -336,7 +470,7 @@ parse_array_index :: () -> *Ast_Node {
     value := parse_factor();
 
     while allow(.OPEN_BRACKET) {
-        op := New(Ast_Binop);
+        op := Make_Ast(Ast_Binop);
         op.operation = .ARRAY_INDEX;
         op.left = value;
         op.right = parse_expression();
@@ -351,24 +485,24 @@ parse_array_index :: () -> *Ast_Node {
 
 parse_factor :: () -> *Ast_Node {
     if allow(.IDENTIFIER) {
-        ident := New(Ast_Identifier);
-        ident.name = current()._string;
+        ident := Make_Ast(Ast_Identifier);
+        ident.name = current_token()._string;
 
         return xx ident;
     }
 
     if allow(.INTEGER) {
-        lit := New(Ast_Literal);
+        lit := Make_Ast(Ast_Literal);
         // lit.type = *primitive_types[Datatype.Primitive.CONSTANT];
-        lit.int_value = current()._int;
+        lit.int_value = current_token()._int;
 
         return xx lit;
     }
 
     if allow(.STRING) {
-        lit := New(Ast_Literal);
+        lit := Make_Ast(Ast_Literal);
         // lit.type = *primitive_types[Datatype.Primitive.STRING];
-        lit.string_value = current()._string;
+        lit.string_value = current_token()._string;
 
         return xx lit;
     }
@@ -377,57 +511,40 @@ parse_factor :: () -> *Ast_Node {
         return xx parse_chip();
     }
 
+    using context.parser;
+    parse_error("Expected an expression, got token %", tokens[token_index].kind);
+
     return null;
 }
 
 parse_chip :: () -> *Ast_Chip {
     expect(.KEYWORD_chip);
 
-    chip := New(Ast_Chip);
+    chip := Make_Ast(Ast_Chip);
     constants, inputs, outputs := parse_parameter_list();
 
     chip.constant_parameters = constants;
     chip.inputs = inputs;
     chip.outputs = outputs;
 
-    expect(.OPEN_BRACE);
-
-    body: [..] *Ast_Node;
-
-    while true {
-        if allow(.CLOSED_BRACE) break;
-
-        statement := parse_statement();
-        array_add(*body, statement);
-    }
-
-    chip.body = body;
+    chip.body = parse_block(.CHIP);
     return chip;
 }
 
 parse_sequential_statement :: () -> *Ast_Sequential_Circuit {
     expect(.KEYWORD_sequential);
+    seq := Make_Ast(Ast_Sequential_Circuit);
+
     expect(.OPEN_PAREN);
 
     sensitivity := parse_expression();
     assert(sensitivity.kind == .IDENTIFIER);
 
     expect(.CLOSED_PAREN);
-    expect(.OPEN_BRACE);
 
-    seq := New(Ast_Sequential_Circuit);
     seq.clock = cast(*Ast_Identifier) sensitivity;
 
-    block: [..] *Ast_Node;
-
-    while true {
-        if allow(.CLOSED_BRACE) break;
-
-        statement := parse_statement();
-        array_add(*block, statement);
-    }
-
-    seq.block = block;
+    seq.block = parse_block(.SEQUENTIAL);
     return seq;
 }
 
@@ -496,8 +613,22 @@ expect :: (expected: .. Token_Kind) -> Token {
 
     for expected if new.kind == it return new;
 
-    assert(false);
+    if !error {
+        error = true;
+        wanted = array_copy(expected);
+        got = new.kind;
+    }
+
     return new;
+}
+
+parse_error :: (report: string, format: .. Any) {
+    using context.parser;
+
+    if !error {
+        error = true;
+        custom_report = tprint(report, .. format);
+    }
 }
 
 peek :: (expected: .. Token_Kind, distance := 1) -> bool {
@@ -520,7 +651,7 @@ peek :: (expected: .. Token_Kind, distance := 1) -> bool {
     return false;
 }
 
-current :: () -> Token {
+current_token :: () -> Token {
     using context.parser;
     return tokens[token_index - 1]; // The last token that was allowed or expected
 }
@@ -589,7 +720,13 @@ Token :: struct {
     _string: string;
     _int: int;
 
-    line, c0, c1: int;
+    using location: Source_Location;
+}
+
+Source_Location :: struct {
+    line: int;
+    start_char: int;
+    end_char: int;
 }
 
 EOT : u8 : 0x4;
@@ -617,8 +754,8 @@ tokenize :: (source: string) -> [] Token {
         if _string != "" token._string = _string;
 
         token.line = line;
-        token.c0 = start - last_line_start - 1;
-        token.c1 = cursor - last_line_start;
+        token.start_char = start - last_line_start - 1;
+        token.end_char = cursor - last_line_start;
 
         if token.kind == .ERROR {
             `return result;
