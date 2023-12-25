@@ -1,0 +1,30 @@
+
+#import "Xilinx Primitives";
+
+main :: (param: constant \ clk: wire) -> ld: wire[16] {
+    COUNTER_BITS :: 26;
+
+    #sync_reset clk;
+
+    leds: flipflop[16];
+    clock: wire;
+
+    _: Bufg(in.clk) -> clock;
+    _: Obuf(leds)   -> out.ld;
+
+    counter: flipflop[COUNTER_BITS];
+    shift: wire[4];
+
+    combinational
+        shift = counter[-2:-5];
+
+    sequential (clock) {
+        counter <= counter + 1;
+
+        if counter[-1] {
+            leds <= 'h8000 >> shift;
+        } else {
+            leds <= 'h0001 << shift;
+        }
+    }
+}

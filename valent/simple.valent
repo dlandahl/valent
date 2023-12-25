@@ -1,6 +1,6 @@
 
 Blinky :: chip (clk: wire) -> led: flipflop {
-    counter: flipflop[19];
+    counter: flipflop[18];
 
     sequential (clk) {
         counter <= counter + 1;
@@ -9,4 +9,4 @@ Blinky :: chip (clk: wire) -> led: flipflop {
             led <= !led;
         }
     }
-};
+}
