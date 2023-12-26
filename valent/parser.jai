@@ -82,7 +82,8 @@ Ast_Node :: struct {
         NONE;
         DECLARATION;
         IDENTIFIER;
-        BINOP;
+        BINARY_OP;
+        UNARY_OP;
         LITERAL;
         CHIP;
         SEQUENTIAL_CIRCUIT;
@@ -95,8 +96,8 @@ Ast_Node :: struct {
     location: Source_Location;
 
     // Todo: This makes all nodes huge
-    data_type: Data_Type;
-    type_has_been_determined: bool;
+    datatype: Datatype;
+    typechecked: bool;
 }
 
 Ast_Declaration :: struct {
@@ -105,7 +106,7 @@ Ast_Declaration :: struct {
 
     name: string;
     type_expression: *Ast_Node;
-    value: *Ast_Node;
+    initialisation_value: *Ast_Node;
 
     constant: bool;
 }
@@ -158,9 +159,9 @@ Ast_If :: struct {
     block: *Ast_Block;
 }
 
-Ast_Binop :: struct {
+Ast_Binary_Op :: struct {
     using #as node: Ast_Node;
-    node.kind = .BINOP;
+    node.kind = .BINARY_OP;
 
     left: *Ast_Node;
     right: *Ast_Node;
@@ -170,7 +171,7 @@ Ast_Binop :: struct {
 
 Ast_Unary_Op :: struct {
     using #as node: Ast_Node;
-    node.kind = .BINOP;
+    node.kind = .UNARY_OP;
 
     argument: *Ast_Node;
 
@@ -181,14 +182,12 @@ Ast_Unary_Op :: struct {
 }
 
 Ast_Chip :: struct {
-    using #as node: Ast_Node;
+    using #as body: Ast_Block;
     node.kind = .CHIP;
 
     constant_parameters: [] *Ast_Declaration;
     inputs: [] *Ast_Declaration;
     outputs: [] *Ast_Declaration;
-
-    body: *Ast_Block;
 }
 
 Ast_Sequential_Circuit :: struct {
@@ -346,7 +345,7 @@ stringify_token :: (token: Token_Kind) -> string {
     }
 }
 
-Data_Type :: struct {
+Datatype :: struct {
     name: string;
     kind: Kind;
 
@@ -359,6 +358,7 @@ Data_Type :: struct {
 
     Primitive :: enum {
         CONSTANT;
+        EXPLICIT_WIDTH_CONSTANT;
         WIRE;
         LATCH;
         FLIPFLOP;
@@ -370,11 +370,11 @@ Data_Type :: struct {
 
     fields: [] struct {
         name: string;
-        type: *Data_Type;
+        type: *Datatype;
         value: float64;
     };
 
-    array_type: *Data_Type;
+    array_type: *Datatype;
     element_count: int;
 }
 
@@ -492,7 +492,14 @@ parse_statement :: () -> *Ast_Node {
 parse_block :: (block_type: Block_Type) -> *Ast_Block {
     expect(.OPEN_BRACE);
 
-    block := Make_Ast(Ast_Block);
+    block: *Ast_Block;
+
+    if block_type == .CHIP {
+        block = cast(*Ast_Block) Make_Ast(Ast_Chip);
+    } else {
+        block = Make_Ast(Ast_Block);
+    }
+
     block.block_type = block_type;
 
     statements: [..] *Ast_Node;
@@ -523,7 +530,7 @@ parse_declaration :: () -> *Ast_Declaration {
     decl.name = ident._string;
 
     if allow(.DOUBLE_COLON) {
-        decl.value = parse_expression();
+        decl.initialisation_value = parse_expression();
         decl.constant = true;
     } else if allow(.COLON) {
         decl.type_expression = parse_expression();
@@ -547,7 +554,7 @@ parse_expression :: (precedence := -9999) -> *Ast_Node {
 
         right := parse_expression(precedence_lookup[next] + 1);
 
-        op := Make_Ast(Ast_Binop);
+        op := Make_Ast(Ast_Binary_Op);
         op.operation = next;
         op.left = left;
         op.right = right;
@@ -584,7 +591,7 @@ parse_atom :: () -> *Ast_Node {
 
     if allow(.INTEGER) {
         lit := Make_Ast(Ast_Literal);
-        // lit.type = *primitive_types[Data_Type.Primitive.CONSTANT];
+        // lit.type = *primitive_types[Datatype.Primitive.CONSTANT];
         lit.int_value = current_token()._int;
 
         atom = lit;
@@ -592,7 +599,7 @@ parse_atom :: () -> *Ast_Node {
 
     if allow(.STRING) {
         lit := Make_Ast(Ast_Literal);
-        // lit.type = *primitive_types[Data_Type.Primitive.STRING];
+        // lit.type = *primitive_types[Datatype.Primitive.STRING];
         lit.string_value = current_token()._string;
 
         atom = lit;
@@ -610,7 +617,7 @@ parse_atom :: () -> *Ast_Node {
     }
 
     while allow(.OPEN_BRACKET) {
-        op := Make_Ast(Ast_Binop);
+        op := Make_Ast(Ast_Binary_Op);
         op.operation = .OPEN_BRACKET; // Eh...
         op.left = atom;
         op.right = parse_expression();
@@ -626,14 +633,14 @@ parse_atom :: () -> *Ast_Node {
 parse_chip :: () -> *Ast_Chip {
     expect(.KEYWORD_chip);
 
-    chip := Make_Ast(Ast_Chip);
     constants, inputs, outputs := parse_parameter_list();
+
+    chip := cast(*Ast_Chip) parse_block(.CHIP);
 
     chip.constant_parameters = constants;
     chip.inputs = inputs;
     chip.outputs = outputs;
 
-    chip.body = parse_block(.CHIP);
     return chip;
 }
 
@@ -649,8 +656,8 @@ parse_sequential_statement :: () -> *Ast_Sequential_Circuit {
     expect(.CLOSED_PAREN);
 
     seq.clock = cast(*Ast_Identifier) sensitivity;
-
     seq.block = parse_block(.SEQUENTIAL);
+
     return seq;
 }
 
