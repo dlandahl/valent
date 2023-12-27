@@ -14,10 +14,11 @@ generate_verilog :: (top: *Ast_Declaration) -> string {
 
     init_string_builder(*context.code_generator.verilog.builder);
 
+    write_verilog("\n");
     generate_chip(top);
 
     code := builder_to_string(*context.code_generator.verilog.builder);
-    print("%\n", code);
+    print(code);
 
     return code;
 }
@@ -36,9 +37,8 @@ generate_chip :: (decl: *Ast_Declaration) {
         if it_index != chip.inputs.count-1 write_verilog(",");
     }
 
-    write_verilog("  );\n");
+    write_verilog("  );\n\n");
     context.code_generator.verilog.indentation_level += 1;
-    write_verilog("\n");
 
     for chip.statements {
         generate_statement(it);
@@ -85,6 +85,25 @@ generate_statement :: (stmt: *Ast_Node) {
         context.code_generator.verilog.indentation_level -= 1;
         write_verilog("\nend\n");
 
+      case .COMBINATIONAL_CIRCUIT;
+        comb := cast(*Ast_Combinational_Circuit) stmt;
+        write_verilog("always @* ");
+
+        if comb.block.statements.count > 1 {
+            write_verilog("begin\n");
+        }
+
+        context.code_generator.verilog.indentation_level += 1;
+
+        for comb.block.statements {
+            generate_statement(it);
+        }
+
+        context.code_generator.verilog.indentation_level -= 1;
+
+        if comb.block.statements.count > 1 write_verilog("\nend");
+        write_verilog("\n");
+
       case .ASSIGNMENT;
         ass := cast(*Ast_Assignment) stmt;
         write_verilog(ass.target.name);
@@ -106,8 +125,18 @@ generate_statement :: (stmt: *Ast_Node) {
         }
 
         context.code_generator.verilog.indentation_level -= 1;
-        write_verilog("end\n");
 
+        if _if.else_block {
+            write_verilog("end else begin\n");
+
+            context.code_generator.verilog.indentation_level += 1;
+            for _if.else_block.statements {
+                generate_statement(it);
+            }
+            context.code_generator.verilog.indentation_level -= 1;
+        }
+
+        write_verilog("end\n");
     }
 }
 
@@ -143,9 +172,8 @@ write_verilog :: (code: string, format: .. Any, do_indent := true) {
 
     to_insert := tprint(code, .. format);
     lines := split(to_insert, "\n");
-    // print("%\n", lines);
 
-    spaces := "                                                                   ";
+    spaces := "                                                             ";
 
     if verilog.last_write_ended_in_a_newline {
         spaces.count = verilog.indentation_level * 4;

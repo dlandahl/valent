@@ -4,6 +4,7 @@
 compile :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
 
     for top_level.statements {
+        // Todo: check for duplicate names at top level
         assert(it.kind == .DECLARATION);
 
         decl := cast(*Ast_Declaration) it;
@@ -25,7 +26,7 @@ compile_top :: (chip: *Ast_Chip) {
         evaluate_type_expression(it.type_expression);
 
         t := *it.type_expression.datatype;
-        if !(t.primitive == .WIRE || (t.array_type && t.array_type.primitive == .WIRE)) {
+        if !is_primitive_or_array_of_primitive(t, .WIRE) {
             semantic_error(it, "each input port of a chip must a be wire or a bus of wires. (Got type %)", t);
         }
     }
@@ -34,7 +35,7 @@ compile_top :: (chip: *Ast_Chip) {
         evaluate_type_expression(it.type_expression);
 
         t := *it.type_expression.datatype;
-        if !(t.primitive == .WIRE || (t.array_type && t.array_type.primitive == .WIRE)) && !(t.primitive == .FLIPFLOP || (t.array_type && t.array_type.primitive == .FLIPFLOP)) {
+        if !is_primitive_or_array_of_primitive(t, .WIRE) && !is_primitive_or_array_of_primitive(t, .FLIPFLOP) {
             semantic_error(it, "each output port of a chip must a be wire, a flipflop, or a bus of wires or flipflops. (Got type %)", t);
         }
     }
@@ -44,6 +45,10 @@ compile_top :: (chip: *Ast_Chip) {
 
 Typechecker :: struct {
     current_block: *Ast_Block;
+}
+
+is_primitive_or_array_of_primitive :: (t: Datatype, p: Datatype.Primitive) -> bool {
+    return t.primitive == p || (t.array_type && t.array_type.primitive == p);
 }
 
 #add_context typechecker: Typechecker;
@@ -57,7 +62,7 @@ typecheck :: (block: *Ast_Block) {
         if existing != null {
             l1 := node_location_string(<< existing);
             l2 := node_location_string(decl);
-            semantic_error(decl, "name '%' has multiple declarations.\n\n%\n\n%", decl.name, l1, l2);
+            semantic_error(decl, "name '%' has multiple declarations in the same block.\n\n%\n\n%", decl.name, l1, l2);
         }
 
         table_add(*names, decl.name, decl);
@@ -96,10 +101,15 @@ typecheck :: (block: *Ast_Block) {
             }
 
             resolve_identifier(ass.target);
+            typecheck_declaration(ass.target.resolved_declaration);
             typecheck_expression(ass.expr);
 
-            if !types_match(ass.target.datatype, ass.expr.datatype) {
-                assert(false);
+            if block.block_type == .SEQUENTIAL && !is_primitive_or_array_of_primitive(ass.target.datatype, .FLIPFLOP) {
+                semantic_error(ass, "sequential blocks may only contain assignments to clocked elements (flipflops)\n\n%", node_location_string(ass));
+            }
+
+            if block.block_type == .COMBINATIONAL && !is_primitive_or_array_of_primitive(ass.target.datatype, .WIRE) {
+                semantic_error(ass, "combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
             }
 
           case .IF;
@@ -107,10 +117,18 @@ typecheck :: (block: *Ast_Block) {
             typecheck_expression(_if.condition);
             typecheck(_if.block);
 
+            if _if.else_block {
+                typecheck(_if.else_block);
+            }
+
           case .SEQUENTIAL_CIRCUIT;
             seq := cast(*Ast_Sequential_Circuit) it;
             resolve_identifier(seq.clock);
             typecheck(seq.block);
+
+          case .COMBINATIONAL_CIRCUIT;
+            comb := cast(*Ast_Combinational_Circuit) it;
+            typecheck(comb.block);
 
           case;
             assert(false);
@@ -205,7 +223,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             expr.datatype.primitive = .WIRE;
 
           case;
-            assert(false);
+            semantic_error(expr, "name is not a type.\n\n%", node_location_string(ident));
         }
 
         return;
@@ -221,6 +239,8 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         evaluate_type_expression(op.left);
         expr.datatype.array_type.* = op.left.datatype;
         expr.datatype.element_count = 0; // evaluate_constant_expression(op.right);
+
+        // typecheck_expression(op.right);
 
         return;
     }
@@ -257,7 +277,12 @@ resolve_identifier :: (id: *Ast_Identifier) {
     }
 
     decl := search_in_block(context.typechecker.current_block, id.name);
-    assert(decl != null);
+    if !decl {
+        semantic_error(id, "Could not find declaration when trying to resolve identifier '%', referenced here:\n\n%", id.name, node_location_string(id));
+    }
+
+    typecheck_declaration(decl);
+    id.datatype = decl.datatype;
 
     id.resolved_declaration = decl;
 }
@@ -272,5 +297,16 @@ node_location_string :: (node: *Ast_Node) -> string {
     loc := node.location;
     line := context.parser.source_code_lines[loc.line];
 
-    return tprint("On line %:\n%", loc.line, line);
+    first := line;
+    first.count = loc.start_char;
+
+    second := line;
+    second.data += loc.start_char;
+    second.count = loc.end_char - loc.start_char;
+
+    third := line;
+    third.data += loc.end_char;
+    third.count -= loc.end_char;
+
+    return tprint("line %:%[31m%[0m%", loc.line, first, second, third);
 }

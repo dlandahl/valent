@@ -92,6 +92,7 @@ Ast_Node :: struct {
         LITERAL;
         CHIP;
         SEQUENTIAL_CIRCUIT;
+        COMBINATIONAL_CIRCUIT;
         ASSIGNMENT;
         IF;
         BLOCK;
@@ -162,6 +163,7 @@ Ast_If :: struct {
 
     condition: *Ast_Node;
     block: *Ast_Block;
+    else_block: *Ast_Block;
 }
 
 Ast_Binary_Op :: struct {
@@ -200,6 +202,13 @@ Ast_Sequential_Circuit :: struct {
     node.kind = .SEQUENTIAL_CIRCUIT;
 
     clock: *Ast_Identifier;
+    block: *Ast_Block;
+}
+
+Ast_Combinational_Circuit :: struct {
+    using #as node: Ast_Node;
+    node.kind = .COMBINATIONAL_CIRCUIT;
+
     block: *Ast_Block;
 }
 
@@ -282,6 +291,9 @@ stringify_statement :: (ast: *Ast_Node) -> string {
       case .SEQUENTIAL_CIRCUIT;
         return "Sequential Block";
 
+      case .COMBINATIONAL_CIRCUIT;
+        return "Combinational Block";
+
       case .DECLARATION;
         decl := cast(*Ast_Declaration) ast;
         if decl.constant return "Constant Declaration";
@@ -355,6 +367,7 @@ Datatype :: struct {
     kind: Kind;
 
     Kind :: enum {
+        INVALID;
         PRIMITIVE;
         STRUCT;
         ENUM;
@@ -362,6 +375,7 @@ Datatype :: struct {
     }
 
     Primitive :: enum {
+        INVALID;
         CONSTANT;
         EXPLICIT_WIDTH_CONSTANT;
         WIRE;
@@ -430,10 +444,7 @@ parse :: () -> *Ast_Block {
                 print("Parse error! Wanted %, got %.\n", stringify_token(parser.wanted[0]), stringify_token(parser.got));
             }
 
-            print("\n\n");
-            assert(false);
-
-            break;
+            exit(1);
         }
     }
 
@@ -453,6 +464,7 @@ parse_statement :: () -> *Ast_Node {
 
             return decl;
         }
+
 
         if peek(.EQUALS, .SEQUENTIAL_ASSIGNMENT, distance = 2) {
             ident := expect(.IDENTIFIER);
@@ -480,12 +492,21 @@ parse_statement :: () -> *Ast_Node {
         parent := peek(context.parser.block_stack);
         _if.block = parse_block(parent.block_type);
 
+        if allow(.KEYWORD_else) {
+            _if.else_block = parse_block(parent.block_type);
+        }
+
         return _if;
     }
 
     if peek(.KEYWORD_sequential) {
         seq := parse_sequential_statement();
         return seq;
+    }
+
+    if peek(.KEYWORD_combinational) {
+        comb := parse_combinational_statement();
+        return comb;
     }
 
     using context.parser;
@@ -495,7 +516,7 @@ parse_statement :: () -> *Ast_Node {
 }
 
 parse_block :: (block_type: Block_Type) -> *Ast_Block {
-    expect(.OPEN_BRACE);
+    multi_line := allow(.OPEN_BRACE);
 
     block: *Ast_Block;
 
@@ -512,14 +533,17 @@ parse_block :: (block_type: Block_Type) -> *Ast_Block {
     push_block(block);
 
     while true {
-        if allow(.CLOSED_BRACE) break;
+        if multi_line if allow(.CLOSED_BRACE) break;
 
         statement := parse_statement();
+        if context.parser.error break;
 
         check_statement_allowed_in_block(statement);
         if context.parser.error break;
 
         array_add(*statements, statement);
+
+        if !multi_line break;
     }
 
     pop_block();
@@ -664,6 +688,15 @@ parse_sequential_statement :: () -> *Ast_Sequential_Circuit {
     seq.block = parse_block(.SEQUENTIAL);
 
     return seq;
+}
+
+parse_combinational_statement :: () -> *Ast_Combinational_Circuit {
+    expect(.KEYWORD_combinational);
+
+    comb := Make_Ast(Ast_Combinational_Circuit);
+    comb.block = parse_block(.COMBINATIONAL);
+
+    return comb;
 }
 
 parse_parameter_list :: () -> [] *Ast_Declaration, [] *Ast_Declaration, [] *Ast_Declaration {
@@ -844,6 +877,7 @@ Token_Kind :: enum {
     KEYWORD_using;
     KEYWORD_for;
     KEYWORD_if;
+    KEYWORD_else;
     KEYWORD_in;
     KEYWORD_out;
     _END_KEYWORDS;
