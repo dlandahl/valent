@@ -1,10 +1,9 @@
 
 #import "Hash_Table";
 
-compile :: (top_level: *Ast_Block, top: string) {
+compile :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
 
     for top_level.statements {
-        // Todo: check for duplicate names at top level
         assert(it.kind == .DECLARATION);
 
         decl := cast(*Ast_Declaration) it;
@@ -12,8 +11,11 @@ compile :: (top_level: *Ast_Block, top: string) {
             assert(decl.initialisation_value.kind == .CHIP);
 
             compile_top(cast(*Ast_Chip) decl.initialisation_value);
+            return decl;
         }
     }
+
+    return null;
 }
 
 compile_top :: (chip: *Ast_Chip) {
@@ -49,16 +51,19 @@ Typechecker :: struct {
 typecheck :: (block: *Ast_Block) {
     names: Table(string, *Ast_Declaration);
 
-    if block.block_type == .CHIP {
+    Duplication_Check :: (decl: *Ast_Declaration) #expand {
+        existing := table_find_pointer(*names, decl.name);
 
-        Duplication_Check :: (decl: *Ast_Declaration) #expand {
-            if table_contains(*names, decl.name) {
-                assert(false);
-            }
-
-            table_add(*names, decl.name, decl);
+        if existing != null {
+            l1 := node_location_string(<< existing);
+            l2 := node_location_string(decl);
+            semantic_error(decl, "name '%' has multiple declarations.\n\n%\n\n%", decl.name, l1, l2);
         }
 
+        table_add(*names, decl.name, decl);
+    }
+
+    if block.block_type == .CHIP {
         chip := cast(*Ast_Chip) block;
 
         for chip.constant_parameters Duplication_Check(it);
@@ -75,11 +80,7 @@ typecheck :: (block: *Ast_Block) {
           case .DECLARATION;
             decl := cast(*Ast_Declaration) it;
 
-            if table_contains(*names, decl.name) {
-                assert(false);
-            }
-
-            table_add(*names, decl.name, decl);
+            Duplication_Check(decl);
 
             if !decl.typechecked {
                 typecheck_declaration(decl);
@@ -115,6 +116,8 @@ typecheck :: (block: *Ast_Block) {
             assert(false);
         }
     }
+
+    block.typechecked = true;
 }
 
 typecheck_expression :: (expr: *Ast_Node) {
@@ -222,7 +225,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         return;
     }
 
-    semantic_error(expr, "Expression is not type-valued (Ast kind %)", expr.kind);
+    semantic_error(expr, "expression is not type-valued (Ast kind %)", expr.kind);
 }
 
 types_match :: (left: Datatype, right: Datatype) -> bool {
@@ -260,7 +263,14 @@ resolve_identifier :: (id: *Ast_Identifier) {
 }
 
 semantic_error :: (ast: *Ast_Node, report: string, format: .. Any) {
-    print("Semantic error: %\n", tprint(report, format));
+    print("\nSemantic error: %\n", tprint(report, .. format));
 
-    assert(false);
+    exit(1);
+}
+
+node_location_string :: (node: *Ast_Node) -> string {
+    loc := node.location;
+    line := context.parser.source_code_lines[loc.line];
+
+    return tprint("On line %:\n%", loc.line, line);
 }

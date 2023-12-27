@@ -4,7 +4,8 @@
 #import "Compiler";
 #import "String";
 
-#load "compile.jai";
+#load "typecheck.jai";
+#load "backend.jai";
 
 #run {
     set_build_options_dc(.{do_output = false});
@@ -44,11 +45,13 @@ main :: () {
         // if it.kind == .ERROR print("[0m");
     }
 
-    context.parser = .{};
     context.parser.tokens = tokens;
 
     ast := parse();
-    compile(ast, "Blinky");
+    top := compile(ast, "Blinky");
+    verilog := generate_verilog(top);
+
+    write_entire_file("Blinky.v", verilog);
 }
 
 Parser :: struct {
@@ -56,6 +59,8 @@ Parser :: struct {
     token_index: int;
 
     block_stack: [..] *Ast_Block;
+
+    source_code_lines: [] string;
 
     error: bool;
     wanted: [] Token_Kind;
@@ -304,7 +309,7 @@ stringify_token :: (token: Token_Kind) -> string {
         case .OPERATOR_MULTIPLY;     return "Asterisk (*)";
         case .OPERATOR_DIVIDE;       return "Slash (/)";
         case .COMMA;                 return "Comma (,)";
-        case .OPERATOR_BIT_OR;          return "Vertical Bar (|)";
+        case .OPERATOR_BIT_OR;       return "Vertical Bar (|)";
         case .SEMICOLON;             return "Semicolon (;)";
         case .EQUALS;                return "Equals (=)";
         case .EXCLAMATION_MARK;      return "Exclamation Mark (!)";
@@ -867,6 +872,8 @@ EOT : u8 : 0x4;
 tokenize :: (source: string) -> [] Token {
     cursor: int;
     result: [..] Token;
+
+    context.parser.source_code_lines = split(source, "\n");
 
     array_reserve(*result, source.count / 4);
 
