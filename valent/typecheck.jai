@@ -238,9 +238,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         expr.datatype.array_type = New(Datatype);
         evaluate_type_expression(op.left);
         expr.datatype.array_type.* = op.left.datatype;
-        expr.datatype.element_count = 0; // evaluate_constant_expression(op.right);
-
-        // typecheck_expression(op.right);
+        expr.datatype.element_count = evaluate_constant_expression(op.right);
 
         return;
     }
@@ -252,11 +250,62 @@ types_match :: (left: Datatype, right: Datatype) -> bool {
     return true;
 }
 
+evaluate_constant_expression :: (expr: *Ast_Node) -> int {
+    if expr.kind == {
+      case .LITERAL;
+        lit := cast(*Ast_Literal) expr;
+        return lit.int_value;
+
+      case .UNARY_OP;
+        op := cast(*Ast_Unary_Op) expr;
+        arg := evaluate_constant_expression(op.argument);
+
+        if op.operation == .LOGIC_NOT return cast(int) !arg;
+        if op.operation == .BIT_NOT return ~arg;
+
+      case .BINARY_OP;
+        op := cast(*Ast_Binary_Op) expr;
+        left := evaluate_constant_expression(op.left);
+        right := evaluate_constant_expression(op.right);
+
+        if op.operation == {
+            case .OPERATOR_ADD;          return left + right;
+            case .OPERATOR_SUBTRACT;     return left - right;
+            case .OPERATOR_MULTIPLY;     return left * right;
+            case .OPERATOR_DIVIDE;       return left / right;
+            case .OPERATOR_BIT_OR;       return left | right;
+            case .OPERATOR_LESS_THAN;    return cast(int) (left < right);
+            case .OPERATOR_GREATER_THAN; return cast(int) (left > right);
+            case .OPERATOR_EQUALS;       return cast(int) (left == right);
+            case .OPERATOR_LOGICAL_OR;   return cast(int) (left || right);
+            case; assert(false);
+        }
+
+      case .IDENTIFIER;
+        id := cast(*Ast_Identifier) expr;
+
+        resolve_identifier(id);
+        typecheck_declaration(id.resolved_declaration);
+
+        if !id.resolved_declaration.constant {
+            l1 := node_location_string(id);
+            l2 := node_location_string(id.resolved_declaration);
+            semantic_error(expr, "the identifier used in this constant expression\n\n%\n\nhas a non-constant declaration\n\n%", l1, l2);
+        }
+
+        return evaluate_constant_expression(id.resolved_declaration.initialisation_value); // Todo cache
+    }
+
+    assert(false);
+    return 0;
+}
+
 resolve_identifier :: (id: *Ast_Identifier) {
 
     search_in_block :: (block: *Ast_Block, name: string) -> *Ast_Declaration {
         if block.block_type == .CHIP {
             chip := cast(*Ast_Chip) block;
+
             for chip.constant_parameters if it.name == name return it;
             for chip.inputs if it.name == name return it;
             for chip.outputs if it.name == name return it;

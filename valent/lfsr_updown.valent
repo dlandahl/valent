@@ -1,5 +1,5 @@
 
-reduce :: combinational (mask: constant | value: wire[8]) -> result: wire {
+reduce :: combinational <mask: constant> (value: wire[8]) -> result: wire {
     result = ~(^(value & mask));
 }
 

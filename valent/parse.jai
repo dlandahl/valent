@@ -138,10 +138,7 @@ Ast_Literal :: struct {
     using #as node: Ast_Node;
     node.kind = .LITERAL;
 
-    union {
-        int_value: int;
-        string_value: string;
-    };
+    int_value: int;
 }
 
 Ast_Assignment :: struct {
@@ -581,7 +578,7 @@ parse_expression :: (precedence := -9999) -> *Ast_Node {
 
         allow(next);
 
-        right := parse_expression(precedence_lookup[next] + 1);
+        right := parse_expression(precedence_lookup[next]);
 
         op := Make_Ast(Ast_Binary_Op);
         op.operation = next;
@@ -618,7 +615,7 @@ parse_atom :: () -> *Ast_Node {
         atom = ident;
     }
 
-    if allow(.INTEGER) {
+    else if allow(.INTEGER) {
         lit := Make_Ast(Ast_Literal);
         // lit.type = *primitive_types[Datatype.Primitive.CONSTANT];
         lit.int_value = current_token()._int;
@@ -626,16 +623,21 @@ parse_atom :: () -> *Ast_Node {
         atom = lit;
     }
 
-    if allow(.STRING) {
-        lit := Make_Ast(Ast_Literal);
-        // lit.type = *primitive_types[Datatype.Primitive.STRING];
-        lit.string_value = current_token()._string;
+//    if allow(.STRING) {
+//        lit := Make_Ast(Ast_Literal);
+//        // lit.type = *primitive_types[Datatype.Primitive.STRING];
+//        lit.string_value = current_token()._string;
+//
+//        atom = lit;
+//    }
 
-        atom = lit;
+    else if peek(.KEYWORD_chip) {
+        atom = parse_chip();
     }
 
-    if peek(.KEYWORD_chip) {
-        atom = parse_chip();
+    else if allow(.OPEN_PAREN) {
+        atom = parse_expression();
+        expect(.CLOSED_PAREN);
     }
 
     if !atom {
@@ -709,6 +711,8 @@ parse_parameter_list :: () -> [] *Ast_Declaration, [] *Ast_Declaration, [] *Ast_
     while peek(.IDENTIFIER) {
         decl := parse_declaration();
         array_add(*inputs, decl);
+
+        if !allow(.COMMA) break;
     }
 
     if allow(.OPERATOR_BIT_OR) {
@@ -721,6 +725,8 @@ parse_parameter_list :: () -> [] *Ast_Declaration, [] *Ast_Declaration, [] *Ast_
         while peek(.IDENTIFIER) {
             decl := parse_declaration();
             array_add(*inputs, decl);
+
+            if !allow(.COMMA) break;
         }
     }
 
@@ -737,6 +743,8 @@ parse_parameter_list :: () -> [] *Ast_Declaration, [] *Ast_Declaration, [] *Ast_
         while peek(.IDENTIFIER) {
             decl := parse_declaration();
             array_add(*outputs, decl);
+
+            if !allow(.COMMA) break;
         }
 
         if started_with_paren {
@@ -966,7 +974,6 @@ tokenize :: (source: string) -> [] Token {
           case #char "+"; Emit(.OPERATOR_ADD);
           case #char ";"; Emit(.SEMICOLON);
           case #char "*"; Emit(.OPERATOR_MULTIPLY);
-          case #char "/"; Emit(.OPERATOR_DIVIDE);
           case #char "("; Emit(.OPEN_PAREN);
           case #char ")"; Emit(.CLOSED_PAREN);
           case #char "["; Emit(.OPEN_BRACKET);
@@ -986,7 +993,7 @@ tokenize :: (source: string) -> [] Token {
 
           case #char ":";
             cursor += 1;
-            if      current() == #char ":"  Emit(.DOUBLE_COLON);
+            if current() == #char ":"  Emit(.DOUBLE_COLON);
             else {
                 cursor -= 1;
                 Emit(.COLON);
@@ -994,7 +1001,7 @@ tokenize :: (source: string) -> [] Token {
 
           case #char "-";
             cursor += 1;
-            if      current() == #char ">"  Emit(.ARROW);
+            if current() == #char ">"  Emit(.ARROW);
             else {
                 cursor -= 1;
                 Emit(.OPERATOR_SUBTRACT);
@@ -1002,7 +1009,7 @@ tokenize :: (source: string) -> [] Token {
 
           case #char "=";
             cursor += 1;
-            if      current() == #char "="  Emit(.OPERATOR_EQUALS);
+            if current() == #char "="  Emit(.OPERATOR_EQUALS);
             else {
                 cursor -= 1;
                 Emit(.EQUALS);
@@ -1010,10 +1017,26 @@ tokenize :: (source: string) -> [] Token {
 
           case #char "<";
             cursor += 1;
-            if      current() == #char "="  Emit(.SEQUENTIAL_ASSIGNMENT);
+            if current() == #char "="  Emit(.SEQUENTIAL_ASSIGNMENT);
             else {
                 cursor -= 1;
                 Emit(.OPERATOR_LESS_THAN);
+            }
+
+          case #char "/";
+            cursor += 1;
+            if current() == #char "/" {
+                while current() != #char "\n" && current() != EOT cursor += 1;
+            } else if current() == #char "*" {
+                while true {
+                    if current() == EOT Emit(.ERROR);
+                    if current() == #char "/" && source[cursor-1] == #char "*" break;
+                    if current() == #char "\n" line += 1;
+                    cursor += 1;
+                }
+            } else {
+                cursor -= 1;
+                Emit(.OPERATOR_DIVIDE);
             }
 
           case 0; #through;
