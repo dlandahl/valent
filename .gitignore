@@ -10,3 +10,4 @@ prjxray/
 *.obj
 *.lib
 *.exp
+*/.build/*

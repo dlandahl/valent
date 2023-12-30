@@ -34,39 +34,32 @@ generate_chip :: (decl: *Ast_Declaration) {
 
     for chip.outputs {
         write_verilog("    output % %\n", ifx it.datatype.primitive == .FLIPFLOP then "reg" else "", it.name);
-        if it_index != chip.inputs.count-1 write_verilog(",");
+        if it_index != chip.outputs.count-1 write_verilog(",");
     }
 
     write_verilog("  );\n\n");
-    context.code_generator.verilog.indentation_level += 1;
 
+    context.code_generator.verilog.indentation_level += 1;
     for chip.statements {
         generate_statement(it);
     }
-
     context.code_generator.verilog.indentation_level -= 1;
+
     write_verilog("endmodule\n");
 }
 
 generate_statement :: (stmt: *Ast_Node) {
     if stmt.kind == {
       case .DECLARATION;
-
         decl := cast(*Ast_Declaration) stmt;
 
         t := decl.datatype;
-        count: int;
-
-        if t.kind == .ARRAY {
-            count = t.element_count;
-            t = << t.array_type;
-        }
 
         if      t.primitive == .FLIPFLOP write_verilog("reg ");
         else if t.primitive == .WIRE     write_verilog("wire ");
 
-        if count > 0 {
-            write_verilog("[%] ", count);
+        if t.bit_width > 1 {
+            write_verilog("[%] ", t.bit_width);
         }
 
         write_verilog(decl.name);
@@ -77,12 +70,11 @@ generate_statement :: (stmt: *Ast_Node) {
         write_verilog("always @ (posedge %) begin\n", seq.clock.name);
 
         context.code_generator.verilog.indentation_level += 1;
-
         for seq.block.statements {
             generate_statement(it);
         }
-
         context.code_generator.verilog.indentation_level -= 1;
+
         write_verilog("\nend\n");
 
       case .COMBINATIONAL_CIRCUIT;
@@ -94,11 +86,9 @@ generate_statement :: (stmt: *Ast_Node) {
         }
 
         context.code_generator.verilog.indentation_level += 1;
-
         for comb.block.statements {
             generate_statement(it);
         }
-
         context.code_generator.verilog.indentation_level -= 1;
 
         if comb.block.statements.count > 1 write_verilog("\nend");

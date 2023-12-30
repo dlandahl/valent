@@ -96,6 +96,7 @@ Ast_Node :: struct {
         ASSIGNMENT;
         IF;
         BLOCK;
+        BIT_SELECT;
     }
 
     kind: Kind;
@@ -139,6 +140,7 @@ Ast_Literal :: struct {
     node.kind = .LITERAL;
 
     int_value: int;
+    bit_width: int;
 }
 
 Ast_Assignment :: struct {
@@ -207,6 +209,20 @@ Ast_Combinational_Circuit :: struct {
     node.kind = .COMBINATIONAL_CIRCUIT;
 
     block: *Ast_Block;
+}
+
+Ast_Bit_Select :: struct {
+    using #as node: Ast_Node;
+    node.kind = .BIT_SELECT;
+
+    left_expression: *Ast_Node;
+    right_expression: *Ast_Node;
+
+    select_type: enum {
+        RANGE;
+        POSITIVE_FIXED_WIDTH;
+        NEGATIVE_FIXED_WIDTH;
+    };
 }
 
 
@@ -336,7 +352,6 @@ stringify_token :: (token: Token_Kind) -> string {
         case .ARROW;                 return "Arrow (->)";
         case .SEQUENTIAL_ASSIGNMENT; return "Sequential Assignment (<=)";
         case .IDENTIFIER;            return "Identifier";
-        case .STRING;                return "String";
         case .INTEGER;               return "Integer";
         case .KEYWORD_chip;          return "Keyword 'chip'";
         case .KEYWORD_function;      return "Keyword 'function'";
@@ -348,9 +363,9 @@ stringify_token :: (token: Token_Kind) -> string {
         case .KEYWORD_using;         return "Keyword 'using'";
         case .KEYWORD_for;           return "Keyword 'for'";
         case .KEYWORD_if;            return "Keyword 'if'";
+        case .KEYWORD_else;          return "Keyword 'else'";
         case .KEYWORD_in;            return "Keyword 'in'";
         case .KEYWORD_out;           return "Keyword 'out'";
-        case .ERROR;                 return "Error";
         case .EOT;                   return "End Of Text";
 
         case;
@@ -360,38 +375,28 @@ stringify_token :: (token: Token_Kind) -> string {
 }
 
 Datatype :: struct {
-    name: string;
-    kind: Kind;
 
-    Kind :: enum {
-        INVALID;
-        PRIMITIVE;
-        STRUCT;
-        ENUM;
-        ARRAY;
-    }
+    // Kind :: enum {
+    //     INVALID;
+    //     PRIMITIVE;
+    //     STRUCT;
+    //     ENUM;
+    //     ARRAY;
+    // }
 
     Primitive :: enum {
         INVALID;
         CONSTANT;
-        EXPLICIT_WIDTH_CONSTANT;
         WIRE;
         LATCH;
         FLIPFLOP;
-        STRING;
+        CHIP;
+        CHIP_INSTANTIATION;
         _COUNT;
     }
 
     primitive: Primitive;
-
-    fields: [] struct {
-        name: string;
-        type: *Datatype;
-        value: float64;
-    };
-
-    array_type: *Datatype;
-    element_count: int;
+    bit_width: int; // -1 means constant with no specific width
 }
 
 #no_reset precedence_lookup: [Token_Kind._END_OPERATORS] int;
@@ -470,7 +475,7 @@ parse_statement :: () -> *Ast_Node {
             ass := Make_Ast(Ast_Assignment);
 
             ass.target = Make_Ast(Ast_Identifier);
-            ass.target.name = ident._string;
+            ass.target.name = ident.string_value;
             ass.target.location = ident.location;
 
             ass.expr = parse_expression();
@@ -553,7 +558,7 @@ parse_declaration :: () -> *Ast_Declaration {
     ident := expect(.IDENTIFIER);
 
     decl := Make_Ast(Ast_Declaration);
-    decl.name = ident._string;
+    decl.name = ident.string_value;
 
     if allow(.DOUBLE_COLON) {
         decl.initialisation_value = parse_expression();
@@ -577,10 +582,10 @@ parse_expression :: (precedence := -9999) -> *Ast_Node {
         if !is_binop || !has_higher_precedence break;
 
         allow(next);
+        op := Make_Ast(Ast_Binary_Op);
 
         right := parse_expression(precedence_lookup[next]);
 
-        op := Make_Ast(Ast_Binary_Op);
         op.operation = next;
         op.left = left;
         op.right = right;
@@ -610,7 +615,7 @@ parse_atom :: () -> *Ast_Node {
 
     if allow(.IDENTIFIER) {
         ident := Make_Ast(Ast_Identifier);
-        ident.name = current_token()._string;
+        ident.name = current_token().string_value;
 
         atom = ident;
     }
@@ -618,7 +623,8 @@ parse_atom :: () -> *Ast_Node {
     else if allow(.INTEGER) {
         lit := Make_Ast(Ast_Literal);
         // lit.type = *primitive_types[Datatype.Primitive.CONSTANT];
-        lit.int_value = current_token()._int;
+        lit.int_value = current_token().int_value;
+        lit.bit_width = current_token().bit_width;
 
         atom = lit;
     }
@@ -626,7 +632,7 @@ parse_atom :: () -> *Ast_Node {
 //    if allow(.STRING) {
 //        lit := Make_Ast(Ast_Literal);
 //        // lit.type = *primitive_types[Datatype.Primitive.STRING];
-//        lit.string_value = current_token()._string;
+//        lit.string_value = current_token().string_value;
 //
 //        atom = lit;
 //    }
@@ -652,6 +658,13 @@ parse_atom :: () -> *Ast_Node {
         op.operation = .OPEN_BRACKET; // Eh...
         op.left = atom;
         op.right = parse_expression();
+
+        if allow(.COLON) {
+            sel := Make_Ast(Ast_Bit_Select);
+            sel.left_expression = op.right;
+            op.right = sel;
+            sel.right_expression = parse_expression();
+        }
 
         expect(.CLOSED_BRACKET);
 
@@ -779,6 +792,7 @@ expect :: (expected: .. Token_Kind) -> Token {
         error = true;
         wanted = array_copy(expected);
         got = new.kind;
+        assert(false);
     }
 
     return new;
@@ -867,7 +881,6 @@ Token_Kind :: enum {
     DOUBLE_COLON;
 
     IDENTIFIER;
-    STRING;
     INTEGER;
 
     _BEGIN_KEYWORDS;
@@ -897,8 +910,10 @@ Token_Kind :: enum {
 Token :: struct {
     kind: Token_Kind;
 
-    _string: string;
-    _int: int;
+    int_value: int;
+    bit_width: int;
+
+    string_value: string;
 
     using location: Source_Location;
 }
@@ -928,12 +943,9 @@ tokenize :: (source: string) -> [] Token {
     start: int;
     line: int;
 
-    Emit :: (kind: Token_Kind, _string := "", _int := 0) -> *Token #expand {
+    Emit :: (kind: Token_Kind) -> *Token #expand {
         token := array_add(*result);
         token.kind = kind;
-
-        if _int    != 0  token._int = _int;
-        if _string != "" token._string = _string;
 
         token.line = line;
         token.start_char = start - last_line_start - 1;
@@ -1044,51 +1056,65 @@ tokenize :: (source: string) -> [] Token {
             Emit(.EOT);
             return result;
 
-          case #char "\"";
-            cursor += 1;
-            text: string;
-            text.data = source.data + cursor;
-
-            while current() != #char "\"" && current() != EOT && current() != #char "\n" {
-                text.count += 1;
-                cursor += 1;
-            }
-
-            if current() == #char "\""
-                then Emit(.STRING, _string = text);
-                else Emit(.ERROR);
-
           case;
-            if is_num(current()) {
-                base: int = 10;
+            if is_num(current()) || current() == #char "'" {
 
-                if current() == #char "0" {
+                width := -1;
+                base := 10;
+
+                start: int;
+                end: int;
+
+                if is_num(current()) {
+                    start = cursor;
+                    while is_num(current()) {
+                        cursor += 1;
+                    }
+                    end = cursor;
+                }
+
+                if current() == #char "'" {
                     cursor += 1;
                     if current() == {
-                      case #char "x";
-                        base = 16;
-                        cursor += 1;
-                      case #char "b";
-                        base = 2;
-                        cursor += 1;
-                      case;
-                        cursor -= 1;
+                        case #char "d";
+                        case #char "h"; base = 16;
+                        case #char "b"; base = 2;
+                    }
+
+                    if end {
+                        width_str: string;
+                        width_str.data = source.data + start;
+                        width_str.count = end - start;
+
+                        success: bool;
+                        width, success = string_to_int(width_str);
+
+                        assert(success);
+                    }
+
+                    cursor += 1;
+                    
+                    if is_num(current()) || is_char(current()) {
+                        start = cursor;
+                        while is_num(current()) || is_char(current()) {
+                            cursor += 1;
+                        }
+                        end = cursor;
                     }
                 }
 
-                len: int;
-                while is_num(current()) || is_char(current()) {
-                    cursor += 1;
-                    len += 1;
-                }
                 cursor -= 1;
 
-                num_str: string;
-                num_str.data = source.data + cursor - len + 1;
-                num_str.count = len;
-                num := string_to_int(num_str, base = base);
+                value_str: string;
+                value_str.data = source.data + start;
+                value_str.count = end - start;
+                value, success := string_to_int(value_str, base = base);
 
-                Emit(.INTEGER, _int = num);
+                assert(success, tprint("%", value_str.count));
+
+                lit := Emit(.INTEGER);
+                lit.int_value = value;
+                lit.bit_width = width;
             }
 
             else if is_char(current()) {
@@ -1100,11 +1126,13 @@ tokenize :: (source: string) -> [] Token {
                 }
                 cursor -= 1;
 
-
                 keyword := lookup_keyword(ident);
 
                 if keyword != .INVALID Emit(keyword);
-                else Emit(.IDENTIFIER, _string = ident);
+                else {
+                    id := Emit(.IDENTIFIER);
+                    id.string_value = ident;
+                }
             }
 
             else {

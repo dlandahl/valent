@@ -11,6 +11,9 @@ compile :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
         if decl.name == top {
             assert(decl.initialisation_value.kind == .CHIP);
 
+            decl.datatype.primitive = .CHIP;
+            decl.typechecked = true;
+
             compile_top(cast(*Ast_Chip) decl.initialisation_value);
             return decl;
         }
@@ -25,18 +28,17 @@ compile_top :: (chip: *Ast_Chip) {
     for chip.inputs {
         evaluate_type_expression(it.type_expression);
 
-        t := *it.type_expression.datatype;
-        if !is_primitive_or_array_of_primitive(t, .WIRE) {
-            semantic_error(it, "each input port of a chip must a be wire or a bus of wires. (Got type %)", t);
+        if it.type_expression.datatype.primitive != .WIRE {
+            semantic_error(it, "each input port of a chip must a be wire or a bus of wires");
         }
     }
 
     for chip.outputs {
         evaluate_type_expression(it.type_expression);
 
-        t := *it.type_expression.datatype;
-        if !is_primitive_or_array_of_primitive(t, .WIRE) && !is_primitive_or_array_of_primitive(t, .FLIPFLOP) {
-            semantic_error(it, "each output port of a chip must a be wire, a flipflop, or a bus of wires or flipflops. (Got type %)", t);
+        // Todo: say what the type was
+        if it.type_expression.datatype.primitive != .WIRE && it.type_expression.datatype.primitive != .FLIPFLOP {
+            semantic_error(it, "each output port of a chip must a be wire, a flipflop, or a bus of wires or flipflops");
         }
     }
 
@@ -45,10 +47,6 @@ compile_top :: (chip: *Ast_Chip) {
 
 Typechecker :: struct {
     current_block: *Ast_Block;
-}
-
-is_primitive_or_array_of_primitive :: (t: Datatype, p: Datatype.Primitive) -> bool {
-    return t.primitive == p || (t.array_type && t.array_type.primitive == p);
 }
 
 #add_context typechecker: Typechecker;
@@ -104,11 +102,12 @@ typecheck :: (block: *Ast_Block) {
             typecheck_declaration(ass.target.resolved_declaration);
             typecheck_expression(ass.expr);
 
-            if block.block_type == .SEQUENTIAL && !is_primitive_or_array_of_primitive(ass.target.datatype, .FLIPFLOP) {
+            if block.block_type == .SEQUENTIAL && ass.target.datatype.primitive != .FLIPFLOP {
+                print("%\n", ass.target.datatype);
                 semantic_error(ass, "sequential blocks may only contain assignments to clocked elements (flipflops)\n\n%", node_location_string(ass));
             }
 
-            if block.block_type == .COMBINATIONAL && !is_primitive_or_array_of_primitive(ass.target.datatype, .WIRE) {
+            if block.block_type == .COMBINATIONAL && ass.target.datatype.primitive != .WIRE {
                 semantic_error(ass, "combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
             }
 
@@ -146,7 +145,8 @@ typecheck_expression :: (expr: *Ast_Node) {
     if expr.kind == {
       case .LITERAL;
         lit := cast(*Ast_Literal) expr;
-        lit.datatype = .{ kind = .PRIMITIVE, primitive = .CONSTANT };
+        lit.datatype = .{ primitive = .CONSTANT };
+        lit.datatype.bit_width = lit.bit_width;
 
       case .IDENTIFIER;
         id := cast(*Ast_Identifier) expr;
@@ -165,14 +165,22 @@ typecheck_expression :: (expr: *Ast_Node) {
         op := cast(*Ast_Unary_Op) expr;
         typecheck_expression(op.argument);
 
+        op.datatype = op.argument.datatype;
+
       case .BINARY_OP;
         op := cast(*Ast_Binary_Op) expr;
         typecheck_expression(op.left);
         typecheck_expression(op.right);
 
-        if op.operation == {
-          case;
-            assert(types_match(op.left.datatype, op.right.datatype));
+        op.datatype = op.left.datatype;
+
+        if op.operation != .OPEN_BRACKET {
+            op.datatype.bit_width = check_bit_width(op, op.left.datatype, op.right.datatype);
+
+            if op.operation == .OPERATOR_ADD       op.datatype.bit_width += 1;
+            if op.operation == .OPERATOR_MULTIPLY  op.datatype.bit_width *= 2;
+        } else {
+            op.datatype.bit_width = 1;
         }
 
       case;
@@ -180,70 +188,80 @@ typecheck_expression :: (expr: *Ast_Node) {
     }
 }
 
+check_bit_width :: (ast: *Ast_Node, left: Datatype, right: Datatype) -> int {
+    assert(left.bit_width != 0 && right.bit_width != 0);
+
+    if left.bit_width == -1 && right.bit_width != -1 return right.bit_width;
+    if left.bit_width != -1 && right.bit_width == -1 return left.bit_width;
+    if left.bit_width == -1 && right.bit_width == -1 return -1;
+
+    if left.bit_width != right.bit_width {
+        loc := node_location_string(ast);
+        semantic_error(ast, "bit widths do not match in this operation\n\n%\n\nLeft width is %, right is %", loc, left.bit_width, right.bit_width);
+    }
+
+    return left.bit_width;
+}
+
 typecheck_declaration :: (decl: *Ast_Declaration) {
     assert(decl.initialisation_value || decl.type_expression);
 
-    if decl.initialisation_value {
-        typecheck_expression(decl.initialisation_value);
-    }
+    if decl.typechecked return;
 
     if decl.type_expression {
         evaluate_type_expression(decl.type_expression);
-    }
-
-    if decl.type_expression && decl.initialisation_value {
-        assert(types_match(decl.type_expression.datatype, decl.initialisation_value.datatype));
-    }
-
-    if decl.type_expression {
         decl.datatype = decl.type_expression.datatype;
     } else {
+        typecheck_expression(decl.initialisation_value);
         decl.datatype = decl.initialisation_value.datatype;
+    }
+
+    prim := decl.datatype.primitive;
+    if prim == .CONSTANT || prim == .CHIP {
+        if !decl.constant {
+            semantic_error(decl, "declarations of type % must be constant. Use 'name :: value' here instead of 'name: type'\n\n%\n\n", prim, node_location_string(decl)); // Todo: stringify type name
+        }
     }
 
     decl.typechecked = true;
 }
 
-// Should move this to parsing
 evaluate_type_expression :: (expr: *Ast_Node) {
     if expr.typechecked return;
 
     defer expr.typechecked = true;
-
-    if expr.kind == .IDENTIFIER {
-        expr.datatype.kind = .PRIMITIVE;
-
-        ident := cast(*Ast_Identifier) expr;
-
-        if ident.name == {
-          case "flipflop";
-            expr.datatype.primitive = .FLIPFLOP;
-
-          case "wire";
-            expr.datatype.primitive = .WIRE;
-
-          case;
-            semantic_error(expr, "name is not a type.\n\n%", node_location_string(ident));
-        }
-
-        return;
-    }
+    root := expr;
 
     if expr.kind == .BINARY_OP {
         op := cast(*Ast_Binary_Op) expr;
-        assert(op.operation == .OPEN_BRACKET);
 
-        expr.datatype.kind = .ARRAY;
+        if op.operation != .OPEN_BRACKET {
+            l := node_location_string(expr);
+            semantic_error(expr, "expected a type\n\n%\n\n", l);
+        }
 
-        expr.datatype.array_type = New(Datatype);
-        evaluate_type_expression(op.left);
-        expr.datatype.array_type.* = op.left.datatype;
-        expr.datatype.element_count = evaluate_constant_expression(op.right);
+        expr.datatype.bit_width = evaluate_constant_expression(op.right);
 
-        return;
+        expr = op.left;
     }
 
-    semantic_error(expr, "expression is not type-valued (Ast kind %)", expr.kind);
+    if expr.kind != .IDENTIFIER {
+        l := node_location_string(expr);
+        semantic_error(expr, "expected a type\n\n%\n\n", l);
+    }
+
+    ident := cast(*Ast_Identifier) expr;
+
+    if ident.name == {
+      case "flipflop";
+        root.datatype.primitive = .FLIPFLOP;
+
+      case "wire";
+        root.datatype.primitive = .WIRE;
+
+      case;
+        semantic_error(expr, "name is not a type.\n\n%", node_location_string(ident));
+    }
 }
 
 types_match :: (left: Datatype, right: Datatype) -> bool {
@@ -251,6 +269,8 @@ types_match :: (left: Datatype, right: Datatype) -> bool {
 }
 
 evaluate_constant_expression :: (expr: *Ast_Node) -> int {
+    typecheck_expression(expr);
+
     if expr.kind == {
       case .LITERAL;
         lit := cast(*Ast_Literal) expr;
@@ -284,13 +304,11 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
       case .IDENTIFIER;
         id := cast(*Ast_Identifier) expr;
 
-        resolve_identifier(id);
-        typecheck_declaration(id.resolved_declaration);
-
-        if !id.resolved_declaration.constant {
+        prim := id.resolved_declaration.datatype.primitive;
+        if prim == .CHIP || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
             l1 := node_location_string(id);
             l2 := node_location_string(id.resolved_declaration);
-            semantic_error(expr, "the identifier used in this constant expression\n\n%\n\nhas a non-constant declaration\n\n%", l1, l2);
+            semantic_error(id, "this identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%\n\n", l1, l2);
         }
 
         return evaluate_constant_expression(id.resolved_declaration.initialisation_value); // Todo cache
