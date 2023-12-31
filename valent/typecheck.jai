@@ -103,13 +103,14 @@ typecheck :: (block: *Ast_Block) {
             typecheck_expression(ass.expr);
 
             if block.block_type == .SEQUENTIAL && ass.target.datatype.primitive != .FLIPFLOP {
-                print("%\n", ass.target.datatype);
                 semantic_error(ass, "sequential blocks may only contain assignments to clocked elements (flipflops)\n\n%", node_location_string(ass));
             }
 
             if block.block_type == .COMBINATIONAL && ass.target.datatype.primitive != .WIRE {
                 semantic_error(ass, "combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
             }
+
+            check_bit_width(ass, ass.target.resolved_declaration.datatype, ass.expr.datatype);
 
           case .IF;
             _if := cast(*Ast_If) it;
@@ -175,21 +176,42 @@ typecheck_expression :: (expr: *Ast_Node) {
         op.datatype = op.left.datatype;
 
         if op.operation != .OPEN_BRACKET {
-            op.datatype.bit_width = check_bit_width(op, op.left.datatype, op.right.datatype);
+            op.datatype.bit_width = max(op.left.datatype.bit_width, op.right.datatype.bit_width);
 
             if op.operation == .OPERATOR_ADD       op.datatype.bit_width += 1;
             if op.operation == .OPERATOR_MULTIPLY  op.datatype.bit_width *= 2;
+
         } else {
-            op.datatype.bit_width = 1;
+            if op.right.kind == .BIT_SELECT {
+                sel := cast(*Ast_Bit_Select) op.right;
+
+                left  := evaluate_constant_expression(sel.left);
+                right := evaluate_constant_expression(sel.right);
+
+                op.datatype.bit_width = left - right + 1;
+            } else {
+                op.datatype.bit_width = 1;
+            }
         }
 
-      case;
-        assert(false);
+      case .BIT_SELECT;
+
+      case .CONCAT;
+        cat := cast(*Ast_Concat) expr;
+        bit_width: int;
+
+        for cat.fields {
+            typecheck_expression(it);
+            bit_width += it.datatype.bit_width;
+        }
+
+        cat.datatype.bit_width = bit_width;
     }
 }
 
 check_bit_width :: (ast: *Ast_Node, left: Datatype, right: Datatype) -> int {
-    assert(left.bit_width != 0 && right.bit_width != 0);
+    assert(left.bit_width != 0);
+    assert(right.bit_width != 0);
 
     if left.bit_width == -1 && right.bit_width != -1 return right.bit_width;
     if left.bit_width != -1 && right.bit_width == -1 return left.bit_width;
@@ -243,6 +265,8 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         expr.datatype.bit_width = evaluate_constant_expression(op.right);
 
         expr = op.left;
+    } else {
+        expr.datatype.bit_width = 1;
     }
 
     if expr.kind != .IDENTIFIER {
@@ -269,7 +293,6 @@ types_match :: (left: Datatype, right: Datatype) -> bool {
 }
 
 evaluate_constant_expression :: (expr: *Ast_Node) -> int {
-    typecheck_expression(expr);
 
     if expr.kind == {
       case .LITERAL;

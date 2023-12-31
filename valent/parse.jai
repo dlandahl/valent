@@ -16,12 +16,6 @@ main :: () {
     file := read_entire_file("simple.valent");
     tokens := tokenize(file);
 
-    if tokens.count {
-        if tokens[tokens.count-1].kind == .ERROR {
-            print("Error! %\n", tokens[tokens.count-1]);
-        }
-    }
-
     line: int;
     lines := split(file, cast(u8) #char "\n");
 
@@ -48,6 +42,9 @@ main :: () {
     context.parser.tokens = tokens;
 
     ast := parse();
+
+    if context.parser.error return;
+
     top := compile(ast, "Blinky");
     verilog := generate_verilog(top);
 
@@ -97,12 +94,12 @@ Ast_Node :: struct {
         IF;
         BLOCK;
         BIT_SELECT;
+        CONCAT;
     }
 
     kind: Kind;
     location: Source_Location;
 
-    // Todo: This makes all nodes huge
     datatype: Datatype;
     typechecked: bool;
 }
@@ -116,6 +113,13 @@ Ast_Declaration :: struct {
     initialisation_value: *Ast_Node;
 
     constant: bool;
+}
+
+Ast_Concat :: struct {
+    using #as node: Ast_Node;
+    node.kind = .CONCAT;
+
+    fields: [] *Ast_Node;
 }
 
 Ast_Block :: struct {
@@ -215,8 +219,8 @@ Ast_Bit_Select :: struct {
     using #as node: Ast_Node;
     node.kind = .BIT_SELECT;
 
-    left_expression: *Ast_Node;
-    right_expression: *Ast_Node;
+    left: *Ast_Node;
+    right: *Ast_Node;
 
     select_type: enum {
         RANGE;
@@ -366,6 +370,7 @@ stringify_token :: (token: Token_Kind) -> string {
         case .KEYWORD_else;          return "Keyword 'else'";
         case .KEYWORD_in;            return "Keyword 'in'";
         case .KEYWORD_out;           return "Keyword 'out'";
+        case .ERROR;                 return "(Unrecognised token)";
         case .EOT;                   return "End Of Text";
 
         case;
@@ -438,7 +443,7 @@ parse :: () -> *Ast_Block {
         }
 
         if parser.error {
-            print("\nOn line % character %:\n", parser.error_location.line+1, parser.error_location.start_char);
+            print("\n");
 
             if parser.custom_report {
                 print("Parse error! %.\n", parser.custom_report);
@@ -446,7 +451,23 @@ parse :: () -> *Ast_Block {
                 print("Parse error! Wanted %, got %.\n", stringify_token(parser.wanted[0]), stringify_token(parser.got));
             }
 
-            exit(1);
+            loc := context.parser.error_location;
+            line := context.parser.source_code_lines[loc.line];
+
+            first := line;
+            first.count = loc.start_char;
+
+            second := line;
+            second.data += loc.start_char;
+            second.count = loc.end_char - loc.start_char;
+
+            third := line;
+            third.data += loc.end_char;
+            third.count -= loc.end_char;
+
+            print("\nline %:%[31m%[0m%\n", loc.line, first, second, third);
+
+            return top_level;
         }
     }
 
@@ -456,7 +477,7 @@ parse :: () -> *Ast_Block {
 
 parse_statement :: () -> *Ast_Node {
 
-    if peek(.IDENTIFIER, distance = 1) {
+    if peek(.IDENTIFIER) {
         if peek(.COLON, .DOUBLE_COLON, distance = 2) {
             decl := parse_declaration();
 
@@ -482,8 +503,14 @@ parse_statement :: () -> *Ast_Node {
             ass.type = ifx op.kind == .EQUALS then .COMBINATIONAL else .SEQUENTIAL;
 
             expect(.SEMICOLON);
+
             return ass;
         }
+
+        using context.parser;
+        parse_error("Expected this identifier to be an assignment or a declaration, but it was followed by a token of kind %", stringify_token(tokens[token_index+1].kind));
+
+        return null;
     }
 
     if allow(.KEYWORD_if) {
@@ -512,7 +539,7 @@ parse_statement :: () -> *Ast_Node {
     }
 
     using context.parser;
-    parse_error("Wanted a statement but got token %", stringify_token(tokens[token_index].kind));
+    parse_error("Wanted a statement but got token of kind %", stringify_token(tokens[token_index].kind));
 
     return null;
 }
@@ -598,9 +625,9 @@ parse_expression :: (precedence := -9999) -> *Ast_Node {
 
 parse_factor :: () -> *Ast_Node {
 
-    if allow(.EXCLAMATION_MARK) {
+    if allow(.EXCLAMATION_MARK, .TILDE) {
         op := Make_Ast(Ast_Unary_Op);
-        op.operation = .LOGIC_NOT;
+        op.operation = ifx current_token().kind == .EXCLAMATION_MARK then .LOGIC_NOT else .BIT_NOT;
 
         op.argument = parse_factor();
 
@@ -641,6 +668,10 @@ parse_atom :: () -> *Ast_Node {
         atom = parse_chip();
     }
 
+    else if peek(.OPEN_BRACE) {
+        atom = parse_concat();
+    }
+
     else if allow(.OPEN_PAREN) {
         atom = parse_expression();
         expect(.CLOSED_PAREN);
@@ -661,9 +692,9 @@ parse_atom :: () -> *Ast_Node {
 
         if allow(.COLON) {
             sel := Make_Ast(Ast_Bit_Select);
-            sel.left_expression = op.right;
+            sel.left = op.right;
             op.right = sel;
-            sel.right_expression = parse_expression();
+            sel.right = parse_expression();
         }
 
         expect(.CLOSED_BRACKET);
@@ -672,6 +703,26 @@ parse_atom :: () -> *Ast_Node {
     }
 
     return atom;
+}
+
+parse_concat :: () -> *Ast_Concat {
+    cat := Make_Ast(Ast_Concat);
+
+    expect(.OPEN_BRACE);
+    fields: [..] *Ast_Node;
+
+    first := parse_expression();
+    array_add(*fields, first);
+
+    while allow(.COMMA) {
+        expr := parse_expression();
+        array_add(*fields, expr);
+    }
+
+    cat.fields = fields;
+    expect(.CLOSED_BRACE);
+
+    return cat;
 }
 
 parse_chip :: () -> *Ast_Chip {
@@ -869,6 +920,7 @@ Token_Kind :: enum {
     DOT;
     EQUALS;
     EXCLAMATION_MARK;
+    TILDE;
     OPEN_PAREN;
     CLOSED_PAREN;
     OPEN_BRACKET;
@@ -994,6 +1046,7 @@ tokenize :: (source: string) -> [] Token {
           case #char "}"; Emit(.CLOSED_BRACE);
           case #char ">"; Emit(.OPERATOR_GREATER_THAN);
           case #char "!"; Emit(.EXCLAMATION_MARK);
+          case #char "~"; Emit(.TILDE);
 
           case #char "|";
             cursor += 1;
@@ -1074,12 +1127,6 @@ tokenize :: (source: string) -> [] Token {
                 }
 
                 if current() == #char "'" {
-                    cursor += 1;
-                    if current() == {
-                        case #char "d";
-                        case #char "h"; base = 16;
-                        case #char "b"; base = 2;
-                    }
 
                     if end {
                         width_str: string;
@@ -1090,6 +1137,14 @@ tokenize :: (source: string) -> [] Token {
                         width, success = string_to_int(width_str);
 
                         assert(success);
+
+                    }
+
+                    cursor += 1;
+                    if current() == {
+                        case #char "d";
+                        case #char "h"; base = 16;
+                        case #char "b"; base = 2;
                     }
 
                     cursor += 1;

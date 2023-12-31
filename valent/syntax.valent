@@ -1,7 +1,7 @@
 
 Image_Data :: external;
 
-Block_Ram :: chip (depth: constant | clk: wire, wr_en: wire, address: wire[32], data: wire[8]) -> data: flipflop[8] {
+Block_Ram :: chip <depth: constant> (clk: wire, wr_en: wire, address: wire[32], data: wire[8]) -> data: flipflop[8] {
 
     memory: [depth] flipflop[8];
 
@@ -25,11 +25,11 @@ Vga_Format :: struct {
     vertical: Zones;
 }
 
-end :: function (format: Vga_Format.Zones) -> constant {
+end :: function <format: Vga_Format.Zones> -> constant {
     return format.video + format.front + format.sync + format.back - 1;
 }
 
-sync_range :: function (format: Vga_Format.Zones) -> constant, constant {
+sync_range :: function <format: Vga_Format.Zones> -> constant, constant {
     start :: format.video + format.front - 1;
     end   :: start + format.sync - 1;
 

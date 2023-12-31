@@ -134,7 +134,11 @@ generate_expression :: (expr: *Ast_Node) {
     if expr.kind == {
       case .LITERAL;
         lit := cast(*Ast_Literal) expr;
-        write_verilog("%", lit.int_value);
+        if lit.bit_width != -1 {
+            write_verilog("%'b%", lit.bit_width, formatInt(lit.int_value, base = 2));
+        } else {
+            write_verilog("%", lit.int_value);
+        }
 
       case .UNARY_OP;
         op := cast(*Ast_Unary_Op) expr;
@@ -145,15 +149,42 @@ generate_expression :: (expr: *Ast_Node) {
 
       case .BINARY_OP;
         op := cast(*Ast_Binary_Op) expr;
-        ops := string.["-", "+", "*", "/", "|", "<", ">", "==", "||"];
 
-        generate_expression(op.left);
-        write_verilog(" % ", ops[op.operation - ._BEGIN_OPERATORS - 1]);
-        generate_expression(op.right);
+        if op.operation == .OPEN_BRACKET {
+            generate_expression(op.left);
+            write_verilog("[");
+            generate_expression(op.right);
+            write_verilog("]");
+        } else {
+            ops := string.["-", "+", "*", "/", "|", "<", ">", "==", "||"];
+
+            generate_expression(op.left);
+            write_verilog(" % ", ops[op.operation - ._BEGIN_OPERATORS - 1]);
+            generate_expression(op.right);
+        }
 
       case .IDENTIFIER;
         id := cast(*Ast_Identifier) expr;
         write_verilog(id.name);
+
+      case .BIT_SELECT;
+        sel := cast(*Ast_Bit_Select) expr;
+
+        generate_expression(sel.left);
+        write_verilog(":");
+        generate_expression(sel.right);
+
+      case .CONCAT;
+        cat := cast(*Ast_Concat) expr;
+        write_verilog("{ ");
+        for cat.fields {
+            generate_expression(it);
+            if it_index != cat.fields.count-1
+                write_verilog(", ");
+        }
+        write_verilog(" }");
+
+      case; assert(false);
     }
 }
 
