@@ -9,7 +9,7 @@ Code_Generator :: struct {
 
 #add_context code_generator: Code_Generator;
 
-generate_verilog :: (top: *Ast_Declaration) -> string {
+generate :: (top: *Ast_Declaration) -> string {
     assert(top.initialisation_value.kind == .CHIP);
 
     init_string_builder(*context.code_generator.verilog.builder);
@@ -18,7 +18,6 @@ generate_verilog :: (top: *Ast_Declaration) -> string {
     generate_chip(top);
 
     code := builder_to_string(*context.code_generator.verilog.builder);
-    print(code);
 
     return code;
 }

@@ -1,61 +1,4 @@
 
-#import "Basic";
-#import "File";
-#import "Compiler";
-#import "String";
-
-#import "Yosys";
-
-#load "typecheck.jai";
-#load "backend.jai";
-
-#run {
-    set_build_options_dc(.{do_output = false});
-    main();
-
-    yosys_setup();
-    yosys_banner();
-}
-
-main :: () {
-    file := read_entire_file("simple.valent");
-    tokens := tokenize(file);
-
-    line: int;
-    lines := split(file, cast(u8) #char "\n");
-
-    // for tokens print("%\n", it);
-    if false for tokens {
-        if it.line > line {
-            print("\n");
-            line = it.line;
-        }
-
-        token_text: string;
-        token_text.count = it.end_char - it.start_char;
-        token_text.data = lines[it.line].data + it.start_char;
-        print("%", token_text);
-
-        // if it.kind == .ERROR print("[31m");
-        // if it.kind == .STRING print("% ", it._string);
-        // else if it.kind == .IDENTIFIER print("% ", it._string);
-        // else if it.kind == .INTEGER print("% ", it._int);
-        // else print("% ", it.kind);
-        // if it.kind == .ERROR print("[0m");
-    }
-
-    context.parser.tokens = tokens;
-
-    ast := parse();
-
-    if context.parser.error return;
-
-    top := compile(ast, "Blinky");
-    verilog := generate_verilog(top);
-
-    write_entire_file("Blinky.v", verilog);
-}
-
 Parser :: struct {
     tokens: [] Token;
     token_index: int;
@@ -69,10 +12,6 @@ Parser :: struct {
     got: Token_Kind;
     custom_report: string;
     error_location: Source_Location;
-}
-
-top_level :: () -> *Ast_Block {
-    return context.parser.block_stack[0];
 }
 
 #add_context parser: Parser;
@@ -425,8 +364,9 @@ Datatype :: struct {
     precedence_lookup[OPERATOR_DIVIDE]        = 7;
 }
 
-parse :: () -> *Ast_Block {
+parse :: (tokens: [] Token) -> *Ast_Block {
     parser := *context.parser;
+    parser.tokens = tokens;
 
     top_level := Make_Ast(Ast_Block);
     top_level.block_type = .TOP_LEVEL;

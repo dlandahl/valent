@@ -15,3 +15,5 @@ prjxray/
 x64/
 
 research
+yosys/YosysVS.vcxproj.user
+/yosys.dll
