@@ -9,7 +9,9 @@ vivado_project/riscv_netlist.v
 prjxray/
 *.obj
 *.exp
-*/.build/*
+.build/*
 
 .vs/
 x64/
+
+research

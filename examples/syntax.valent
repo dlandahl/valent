@@ -1,4 +1,7 @@
 
+// Need a way to specify signed arithmetic
+
+
 Image_Data :: external;
 
 Block_Ram :: chip <depth: constant> (clk: wire, wr_en: wire, address: wire[32], data: wire[8]) -> data: flipflop[8] {

@@ -7,7 +7,7 @@ Blinky :: chip (clk: wire, reset: wire) -> led: flipflop {
         counter <= 0;
         led <= 0;
     } else {
-        counter <= counter + 1;
+        counter <= 0;
 
         if counter == 0 {
             led <= !led;

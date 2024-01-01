@@ -1,5 +1,6 @@
 
 #import "Hash_Table";
+#import "Yosys";
 
 compile :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
 
@@ -161,6 +162,7 @@ typecheck_expression :: (expr: *Ast_Node) {
         }
 
         id.datatype = id.resolved_declaration.datatype;
+
 
       case .UNARY_OP;
         op := cast(*Ast_Unary_Op) expr;
