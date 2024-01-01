@@ -1,0 +1,548 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{0A85FA61-B1B7-4F7A-A794-6238A920D852}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>YosysVS</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <AllProjectBMIsArePublic>false</AllProjectBMIsArePublic>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_YOSYS_;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>yosys</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_YOSYS_;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>yosys</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>_YOSYS_;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>yosys</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>_YOSYS_;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>yosys</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="yosys/backends/rtlil/rtlil_backend.h" />
+    <ClInclude Include="yosys/frontends/aiger/aigerparse.h" />
+    <ClInclude Include="yosys/frontends/ast/ast.h" />
+    <ClInclude Include="yosys/frontends/ast/ast_binding.h" />
+    <ClInclude Include="yosys/frontends/blif/blifparse.h" />
+    <ClInclude Include="yosys/frontends/rtlil/rtlil_frontend.h" />
+    <ClInclude Include="yosys/frontends/rtlil/rtlil_parser.tab.hh" />
+    <ClInclude Include="yosys/frontends/verific/verific.h" />
+    <ClInclude Include="yosys/frontends/verilog/preproc.h" />
+    <ClInclude Include="yosys/frontends/verilog/verilog_frontend.h" />
+    <ClInclude Include="yosys/frontends/verilog/verilog_parser.tab.hh" />
+    <ClInclude Include="yosys/kernel/binding.h" />
+    <ClInclude Include="yosys/kernel/bitpattern.h" />
+    <ClInclude Include="yosys/kernel/cellaigs.h" />
+    <ClInclude Include="yosys/kernel/celledges.h" />
+    <ClInclude Include="yosys/kernel/celltypes.h" />
+    <ClInclude Include="yosys/kernel/consteval.h" />
+    <ClInclude Include="yosys/kernel/constids.inc" />
+    <ClInclude Include="yosys/kernel/cost.h" />
+    <ClInclude Include="yosys/kernel/ff.h" />
+    <ClInclude Include="yosys/kernel/ffinit.h" />
+    <ClInclude Include="yosys/kernel/ffmerge.h" />
+    <ClInclude Include="yosys/kernel/fmt.h" />
+    <ClInclude Include="yosys/kernel/fstdata.h" />
+    <ClInclude Include="yosys/kernel/hashlib.h" />
+    <ClInclude Include="yosys/kernel/json.h" />
+    <ClInclude Include="yosys/kernel/log.h" />
+    <ClInclude Include="yosys/kernel/macc.h" />
+    <ClInclude Include="yosys/kernel/mem.h" />
+    <ClInclude Include="yosys/kernel/modtools.h" />
+    <ClInclude Include="yosys/kernel/qcsat.h" />
+    <ClInclude Include="yosys/kernel/register.h" />
+    <ClInclude Include="yosys/kernel/rtlil.h" />
+    <ClInclude Include="yosys/kernel/satgen.h" />
+    <ClInclude Include="yosys/kernel/sigtools.h" />
+    <ClInclude Include="yosys/kernel/timinginfo.h" />
+    <ClInclude Include="yosys/kernel/utils.h" />
+    <ClInclude Include="yosys/kernel/yosys.h" />
+    <ClInclude Include="yosys/kernel/yw.h" />
+    <ClInclude Include="yosys/libs/bigint/BigInteger.hh" />
+    <ClInclude Include="yosys/libs/bigint/BigIntegerAlgorithms.hh" />
+    <ClInclude Include="yosys/libs/bigint/BigIntegerLibrary.hh" />
+    <ClInclude Include="yosys/libs/bigint/BigIntegerUtils.hh" />
+    <ClInclude Include="yosys/libs/bigint/BigUnsigned.hh" />
+    <ClInclude Include="yosys/libs/bigint/BigUnsignedInABase.hh" />
+    <ClInclude Include="yosys/libs/bigint/NumberlikeArray.hh" />
+    <ClInclude Include="yosys/libs/ezsat/ezminisat.h" />
+    <ClInclude Include="yosys/libs/ezsat/ezsat.h" />
+    <ClInclude Include="yosys/libs/fst/config.h" />
+    <ClInclude Include="yosys/libs/fst/fastlz.h" />
+    <ClInclude Include="yosys/libs/fst/fstapi.h" />
+    <ClInclude Include="yosys/libs/fst/lz4.h" />
+    <ClInclude Include="yosys/libs/json11/json11.hpp" />
+    <ClInclude Include="yosys/libs/minisat/Alg.h" />
+    <ClInclude Include="yosys/libs/minisat/Alloc.h" />
+    <ClInclude Include="yosys/libs/minisat/Heap.h" />
+    <ClInclude Include="yosys/libs/minisat/IntMap.h" />
+    <ClInclude Include="yosys/libs/minisat/IntTypes.h" />
+    <ClInclude Include="yosys/libs/minisat/Map.h" />
+    <ClInclude Include="yosys/libs/minisat/Options.h" />
+    <ClInclude Include="yosys/libs/minisat/ParseUtils.h" />
+    <ClInclude Include="yosys/libs/minisat/Queue.h" />
+    <ClInclude Include="yosys/libs/minisat/SimpSolver.h" />
+    <ClInclude Include="yosys/libs/minisat/Solver.h" />
+    <ClInclude Include="yosys/libs/minisat/SolverTypes.h" />
+    <ClInclude Include="yosys/libs/minisat/Sort.h" />
+    <ClInclude Include="yosys/libs/minisat/System.h" />
+    <ClInclude Include="yosys/libs/minisat/Vec.h" />
+    <ClInclude Include="yosys/libs/minisat/XAlloc.h" />
+    <ClInclude Include="yosys/libs/sha1/sha1.h" />
+    <ClInclude Include="yosys/libs/subcircuit/subcircuit.h" />
+    <ClInclude Include="yosys/passes/fsm/fsmdata.h" />
+    <ClInclude Include="yosys/passes/memory/memlib.h" />
+    <ClInclude Include="yosys/passes/pmgen/generate.h" />
+    <ClInclude Include="yosys/passes/pmgen/ice40_dsp_pm.h" />
+    <ClInclude Include="yosys/passes/pmgen/ice40_wrapcarry_pm.h" />
+    <ClInclude Include="yosys/passes/pmgen/peepopt_pm.h" />
+    <ClInclude Include="yosys/passes/pmgen/test_pmgen_pm.h" />
+    <ClInclude Include="yosys/passes/pmgen/xilinx_dsp48a_pm.h" />
+    <ClInclude Include="yosys/passes/pmgen/xilinx_dsp_CREG_pm.h" />
+    <ClInclude Include="yosys/passes/pmgen/xilinx_dsp_cascade_pm.h" />
+    <ClInclude Include="yosys/passes/pmgen/xilinx_dsp_pm.h" />
+    <ClInclude Include="yosys/passes/pmgen/xilinx_srl_pm.h" />
+    <ClInclude Include="yosys/passes/sat/qbfsat.h" />
+    <ClInclude Include="yosys/passes/techmap/libparse.h" />
+    <ClInclude Include="yosys/passes/techmap/simplemap.h" />
+    <ClInclude Include="yosys/techlibs/common/simcells_help.inc" />
+    <ClInclude Include="yosys/techlibs/common/simlib_help.inc" />
+    <ClInclude Include="yosys/techlibs/quicklogic/ql_dsp_macc_pm.h" />
+    <ClCompile Include="wrapper.cc" />
+    <ClCompile Include="yosys/backends/aiger/aiger.cc" />
+    <ClCompile Include="yosys/backends/aiger/xaiger.cc" />
+    <ClCompile Include="yosys/backends/blif/blif.cc" />
+    <ClCompile Include="yosys/backends/btor/btor.cc" />
+    <ClCompile Include="yosys/backends/cxxrtl/cxxrtl_backend.cc" />
+    <ClCompile Include="yosys/backends/edif/edif.cc" />
+    <ClCompile Include="yosys/backends/firrtl/firrtl.cc" />
+    <ClCompile Include="yosys/backends/intersynth/intersynth.cc" />
+    <ClCompile Include="yosys/backends/jny/jny.cc" />
+    <ClCompile Include="yosys/backends/json/json.cc" />
+    <ClCompile Include="yosys/backends/rtlil/rtlil_backend.cc" />
+    <ClCompile Include="yosys/backends/simplec/simplec.cc" />
+    <ClCompile Include="yosys/backends/smt2/smt2.cc" />
+    <ClCompile Include="yosys/backends/smv/smv.cc" />
+    <ClCompile Include="yosys/backends/spice/spice.cc" />
+    <ClCompile Include="yosys/backends/table/table.cc" />
+    <ClCompile Include="yosys/backends/verilog/verilog_backend.cc" />
+    <ClCompile Include="yosys/frontends/aiger/aigerparse.cc" />
+    <ClCompile Include="yosys/frontends/ast/ast.cc" />
+    <ClCompile Include="yosys/frontends/ast/ast_binding.cc" />
+    <ClCompile Include="yosys/frontends/ast/dpicall.cc" />
+    <ClCompile Include="yosys/frontends/ast/genrtlil.cc" />
+    <ClCompile Include="yosys/frontends/ast/simplify.cc" />
+    <ClCompile Include="yosys/frontends/blif/blifparse.cc" />
+    <ClCompile Include="yosys/frontends/json/jsonparse.cc" />
+    <ClCompile Include="yosys/frontends/liberty/liberty.cc" />
+    <ClCompile Include="yosys/frontends/rpc/rpc_frontend.cc" />
+    <ClCompile Include="yosys/frontends/rtlil/rtlil_frontend.cc" />
+    <ClCompile Include="yosys/frontends/rtlil/rtlil_lexer.cc" />
+    <ClCompile Include="yosys/frontends/rtlil/rtlil_parser.tab.cc" />
+    <ClCompile Include="yosys/frontends/verific/verific.cc" />
+    <ClCompile Include="yosys/frontends/verilog/const2ast.cc" />
+    <ClCompile Include="yosys/frontends/verilog/preproc.cc" />
+    <ClCompile Include="yosys/frontends/verilog/verilog_frontend.cc" />
+    <ClCompile Include="yosys/frontends/verilog/verilog_lexer.cc" />
+    <ClCompile Include="yosys/frontends/verilog/verilog_parser.tab.cc" />
+    <ClCompile Include="yosys/kernel/binding.cc" />
+    <ClCompile Include="yosys/kernel/calc.cc" />
+    <ClCompile Include="yosys/kernel/cellaigs.cc" />
+    <ClCompile Include="yosys/kernel/celledges.cc" />
+    <ClCompile Include="yosys/kernel/driver.cc" />
+    <ClCompile Include="yosys/kernel/ff.cc" />
+    <ClCompile Include="yosys/kernel/ffmerge.cc" />
+    <ClCompile Include="yosys/kernel/fmt.cc" />
+    <ClCompile Include="yosys/kernel/fstdata.cc" />
+    <ClCompile Include="yosys/kernel/json.cc" />
+    <ClCompile Include="yosys/kernel/log.cc" />
+    <ClCompile Include="yosys/kernel/mem.cc" />
+    <ClCompile Include="yosys/kernel/qcsat.cc" />
+    <ClCompile Include="yosys/kernel/register.cc" />
+    <ClCompile Include="yosys/kernel/rtlil.cc" />
+    <ClCompile Include="yosys/kernel/satgen.cc" />
+    <ClCompile Include="yosys/kernel/yosys.cc" />
+    <ClCompile Include="yosys/kernel/yw.cc" />
+    <ClCompile Include="yosys/libs/bigint/BigInteger.cc" />
+    <ClCompile Include="yosys/libs/bigint/BigIntegerAlgorithms.cc" />
+    <ClCompile Include="yosys/libs/bigint/BigIntegerUtils.cc" />
+    <ClCompile Include="yosys/libs/bigint/BigUnsigned.cc" />
+    <ClCompile Include="yosys/libs/bigint/BigUnsignedInABase.cc" />
+    <ClCompile Include="yosys/libs/ezsat/ezminisat.cc" />
+    <ClCompile Include="yosys/libs/ezsat/ezsat.cc" />
+    <ClCompile Include="yosys/libs/fst/fastlz.cc" />
+    <ClCompile Include="yosys/libs/fst/fstapi.cc" />
+    <ClCompile Include="yosys/libs/fst/lz4.cc" />
+    <ClCompile Include="yosys/libs/json11/json11.cpp" />
+    <ClCompile Include="yosys/libs/minisat/Options.cc" />
+    <ClCompile Include="yosys/libs/minisat/SimpSolver.cc" />
+    <ClCompile Include="yosys/libs/minisat/Solver.cc" />
+    <ClCompile Include="yosys/libs/minisat/System.cc" />
+    <ClCompile Include="yosys/libs/sha1/sha1.cpp" />
+    <ClCompile Include="yosys/libs/subcircuit/subcircuit.cc" />
+    <ClCompile Include="yosys/passes/cmds/add.cc" />
+    <ClCompile Include="yosys/passes/cmds/autoname.cc" />
+    <ClCompile Include="yosys/passes/cmds/blackbox.cc" />
+    <ClCompile Include="yosys/passes/cmds/bugpoint.cc" />
+    <ClCompile Include="yosys/passes/cmds/check.cc" />
+    <ClCompile Include="yosys/passes/cmds/chformal.cc" />
+    <ClCompile Include="yosys/passes/cmds/chtype.cc" />
+    <ClCompile Include="yosys/passes/cmds/clean_zerowidth.cc" />
+    <ClCompile Include="yosys/passes/cmds/connect.cc" />
+    <ClCompile Include="yosys/passes/cmds/connwrappers.cc" />
+    <ClCompile Include="yosys/passes/cmds/copy.cc" />
+    <ClCompile Include="yosys/passes/cmds/cover.cc" />
+    <ClCompile Include="yosys/passes/cmds/delete.cc" />
+    <ClCompile Include="yosys/passes/cmds/design.cc" />
+    <ClCompile Include="yosys/passes/cmds/dft_tag.cc" />
+    <ClCompile Include="yosys/passes/cmds/edgetypes.cc" />
+    <ClCompile Include="yosys/passes/cmds/exec.cc" />
+    <ClCompile Include="yosys/passes/cmds/future.cc" />
+    <ClCompile Include="yosys/passes/cmds/glift.cc" />
+    <ClCompile Include="yosys/passes/cmds/logcmd.cc" />
+    <ClCompile Include="yosys/passes/cmds/logger.cc" />
+    <ClCompile Include="yosys/passes/cmds/ltp.cc" />
+    <ClCompile Include="yosys/passes/cmds/plugin.cc" />
+    <ClCompile Include="yosys/passes/cmds/portlist.cc" />
+    <ClCompile Include="yosys/passes/cmds/printattrs.cc" />
+    <ClCompile Include="yosys/passes/cmds/qwp.cc" />
+    <ClCompile Include="yosys/passes/cmds/rename.cc" />
+    <ClCompile Include="yosys/passes/cmds/scatter.cc" />
+    <ClCompile Include="yosys/passes/cmds/scc.cc" />
+    <ClCompile Include="yosys/passes/cmds/scratchpad.cc" />
+    <ClCompile Include="yosys/passes/cmds/select.cc" />
+    <ClCompile Include="yosys/passes/cmds/setattr.cc" />
+    <ClCompile Include="yosys/passes/cmds/setundef.cc" />
+    <ClCompile Include="yosys/passes/cmds/show.cc" />
+    <ClCompile Include="yosys/passes/cmds/splice.cc" />
+    <ClCompile Include="yosys/passes/cmds/splitcells.cc" />
+    <ClCompile Include="yosys/passes/cmds/splitnets.cc" />
+    <ClCompile Include="yosys/passes/cmds/sta.cc" />
+    <ClCompile Include="yosys/passes/cmds/stat.cc" />
+    <ClCompile Include="yosys/passes/cmds/tee.cc" />
+    <ClCompile Include="yosys/passes/cmds/torder.cc" />
+    <ClCompile Include="yosys/passes/cmds/trace.cc" />
+    <ClCompile Include="yosys/passes/cmds/viz.cc" />
+    <ClCompile Include="yosys/passes/cmds/write_file.cc" />
+    <ClCompile Include="yosys/passes/cmds/xprop.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_add.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_induct.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_make.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_mark.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_miter.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_opt.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_purge.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_remove.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_simple.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_status.cc" />
+    <ClCompile Include="yosys/passes/equiv/equiv_struct.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm_detect.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm_expand.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm_export.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm_extract.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm_info.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm_map.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm_opt.cc" />
+    <ClCompile Include="yosys/passes/fsm/fsm_recode.cc" />
+    <ClCompile Include="yosys/passes/hierarchy/hierarchy.cc" />
+    <ClCompile Include="yosys/passes/hierarchy/submod.cc" />
+    <ClCompile Include="yosys/passes/hierarchy/uniquify.cc" />
+    <ClCompile Include="yosys/passes/memory/memlib.cc" />
+    <ClCompile Include="yosys/passes/memory/memory.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_bmux2rom.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_bram.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_collect.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_dff.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_libmap.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_map.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_memx.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_narrow.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_nordff.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_share.cc" />
+    <ClCompile Include="yosys/passes/memory/memory_unpack.cc" />
+    <ClCompile Include="yosys/passes/opt/muxpack.cc" />
+    <ClCompile Include="yosys/passes/opt/opt.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_clean.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_demorgan.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_dff.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_expr.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_ffinv.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_lut.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_lut_ins.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_mem.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_mem_feedback.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_mem_priority.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_mem_widen.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_merge.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_muxtree.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_reduce.cc" />
+    <ClCompile Include="yosys/passes/opt/opt_share.cc" />
+    <ClCompile Include="yosys/passes/opt/pmux2shiftx.cc" />
+    <ClCompile Include="yosys/passes/opt/rmports.cc" />
+    <ClCompile Include="yosys/passes/opt/share.cc" />
+    <ClCompile Include="yosys/passes/opt/wreduce.cc" />
+    <ClCompile Include="yosys/passes/pmgen/ice40_dsp.cc" />
+    <ClCompile Include="yosys/passes/pmgen/ice40_wrapcarry.cc" />
+    <ClCompile Include="yosys/passes/pmgen/peepopt.cc" />
+    <ClCompile Include="yosys/passes/pmgen/test_pmgen.cc" />
+    <ClCompile Include="yosys/passes/pmgen/xilinx_dsp.cc" />
+    <ClCompile Include="yosys/passes/pmgen/xilinx_srl.cc" />
+    <ClCompile Include="yosys/passes/proc/proc.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_arst.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_clean.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_dff.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_dlatch.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_init.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_memwr.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_mux.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_prune.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_rmdead.cc" />
+    <ClCompile Include="yosys/passes/proc/proc_rom.cc" />
+    <ClCompile Include="yosys/passes/sat/assertpmux.cc" />
+    <ClCompile Include="yosys/passes/sat/async2sync.cc" />
+    <ClCompile Include="yosys/passes/sat/clk2fflogic.cc" />
+    <ClCompile Include="yosys/passes/sat/cutpoint.cc" />
+    <ClCompile Include="yosys/passes/sat/eval.cc" />
+    <ClCompile Include="yosys/passes/sat/expose.cc" />
+    <ClCompile Include="yosys/passes/sat/fmcombine.cc" />
+    <ClCompile Include="yosys/passes/sat/fminit.cc" />
+    <ClCompile Include="yosys/passes/sat/formalff.cc" />
+    <ClCompile Include="yosys/passes/sat/freduce.cc" />
+    <ClCompile Include="yosys/passes/sat/miter.cc" />
+    <ClCompile Include="yosys/passes/sat/mutate.cc" />
+    <ClCompile Include="yosys/passes/sat/qbfsat.cc" />
+    <ClCompile Include="yosys/passes/sat/recover_names.cc" />
+    <ClCompile Include="yosys/passes/sat/sat.cc" />
+    <ClCompile Include="yosys/passes/sat/sim.cc" />
+    <ClCompile Include="yosys/passes/sat/supercover.cc" />
+    <ClCompile Include="yosys/passes/sat/synthprop.cc" />
+    <ClCompile Include="yosys/passes/techmap/abc.cc" />
+    <ClCompile Include="yosys/passes/techmap/abc9.cc" />
+    <ClCompile Include="yosys/passes/techmap/abc9_exe.cc" />
+    <ClCompile Include="yosys/passes/techmap/abc9_ops.cc" />
+    <ClCompile Include="yosys/passes/techmap/aigmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/alumacc.cc" />
+    <ClCompile Include="yosys/passes/techmap/attrmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/attrmvcp.cc" />
+    <ClCompile Include="yosys/passes/techmap/bmuxmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/booth.cc" />
+    <ClCompile Include="yosys/passes/techmap/bwmuxmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/clkbufmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/deminout.cc" />
+    <ClCompile Include="yosys/passes/techmap/demuxmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/dffinit.cc" />
+    <ClCompile Include="yosys/passes/techmap/dfflegalize.cc" />
+    <ClCompile Include="yosys/passes/techmap/dfflibmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/dffunmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/extract.cc" />
+    <ClCompile Include="yosys/passes/techmap/extract_counter.cc" />
+    <ClCompile Include="yosys/passes/techmap/extract_fa.cc" />
+    <ClCompile Include="yosys/passes/techmap/extract_reduce.cc" />
+    <ClCompile Include="yosys/passes/techmap/extractinv.cc" />
+    <ClCompile Include="yosys/passes/techmap/flatten.cc" />
+    <ClCompile Include="yosys/passes/techmap/flowmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/hilomap.cc" />
+    <ClCompile Include="yosys/passes/techmap/insbuf.cc" />
+    <ClCompile Include="yosys/passes/techmap/iopadmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/libparse.cc" />
+    <ClCompile Include="yosys/passes/techmap/lut2mux.cc" />
+    <ClCompile Include="yosys/passes/techmap/maccmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/muxcover.cc" />
+    <ClCompile Include="yosys/passes/techmap/nlutmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/pmuxtree.cc" />
+    <ClCompile Include="yosys/passes/techmap/shregmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/simplemap.cc" />
+    <ClCompile Include="yosys/passes/techmap/techmap.cc" />
+    <ClCompile Include="yosys/passes/techmap/tribuf.cc" />
+    <ClCompile Include="yosys/passes/techmap/zinit.cc" />
+    <ClCompile Include="yosys/passes/tests/test_abcloop.cc" />
+    <ClCompile Include="yosys/passes/tests/test_autotb.cc" />
+    <ClCompile Include="yosys/passes/tests/test_cell.cc" />
+    <ClCompile Include="yosys/techlibs/achronix/synth_achronix.cc" />
+    <ClCompile Include="yosys/techlibs/anlogic/anlogic_eqn.cc" />
+    <ClCompile Include="yosys/techlibs/anlogic/anlogic_fixcarry.cc" />
+    <ClCompile Include="yosys/techlibs/anlogic/synth_anlogic.cc" />
+    <ClCompile Include="yosys/techlibs/common/prep.cc" />
+    <ClCompile Include="yosys/techlibs/common/synth.cc" />
+    <ClCompile Include="yosys/techlibs/coolrunner2/coolrunner2_fixup.cc" />
+    <ClCompile Include="yosys/techlibs/coolrunner2/coolrunner2_sop.cc" />
+    <ClCompile Include="yosys/techlibs/coolrunner2/synth_coolrunner2.cc" />
+    <ClCompile Include="yosys/techlibs/easic/synth_easic.cc" />
+    <ClCompile Include="yosys/techlibs/ecp5/synth_ecp5.cc" />
+    <ClCompile Include="yosys/techlibs/efinix/efinix_fixcarry.cc" />
+    <ClCompile Include="yosys/techlibs/efinix/synth_efinix.cc" />
+    <ClCompile Include="yosys/techlibs/fabulous/synth_fabulous.cc" />
+    <ClCompile Include="yosys/techlibs/gatemate/gatemate_foldinv.cc" />
+    <ClCompile Include="yosys/techlibs/gatemate/synth_gatemate.cc" />
+    <ClCompile Include="yosys/techlibs/gowin/synth_gowin.cc" />
+    <ClCompile Include="yosys/techlibs/greenpak4/greenpak4_dffinv.cc" />
+    <ClCompile Include="yosys/techlibs/greenpak4/synth_greenpak4.cc" />
+    <ClCompile Include="yosys/techlibs/ice40/ice40_braminit.cc" />
+    <ClCompile Include="yosys/techlibs/ice40/ice40_opt.cc" />
+    <ClCompile Include="yosys/techlibs/ice40/synth_ice40.cc" />
+    <ClCompile Include="yosys/techlibs/intel/synth_intel.cc" />
+    <ClCompile Include="yosys/techlibs/intel_alm/synth_intel_alm.cc" />
+    <ClCompile Include="yosys/techlibs/lattice/lattice_gsr.cc" />
+    <ClCompile Include="yosys/techlibs/lattice/synth_lattice.cc" />
+    <ClCompile Include="yosys/techlibs/nexus/synth_nexus.cc" />
+    <ClCompile Include="yosys/techlibs/quicklogic/ql_bram_merge.cc" />
+    <ClCompile Include="yosys/techlibs/quicklogic/ql_bram_types.cc" />
+    <ClCompile Include="yosys/techlibs/quicklogic/ql_dsp_io_regs.cc" />
+    <ClCompile Include="yosys/techlibs/quicklogic/ql_dsp_macc.cc" />
+    <ClCompile Include="yosys/techlibs/quicklogic/ql_dsp_simd.cc" />
+    <ClCompile Include="yosys/techlibs/quicklogic/synth_quicklogic.cc" />
+    <ClCompile Include="yosys/techlibs/sf2/synth_sf2.cc" />
+    <ClCompile Include="yosys/techlibs/xilinx/synth_xilinx.cc" />
+    <ClCompile Include="yosys/techlibs/xilinx/xilinx_dffopt.cc" />
+    <ClCompile Include="yosys/libs/zlib/adler32.c" />
+    <ClCompile Include="yosys/libs/zlib/compress.c" />
+    <ClCompile Include="yosys/libs/zlib/crc32.c" />
+    <ClCompile Include="yosys/libs/zlib/deflate.c" />
+    <ClCompile Include="yosys/libs/zlib/gzclose.c" />
+    <ClCompile Include="yosys/libs/zlib/gzlib.c" />
+    <ClCompile Include="yosys/libs/zlib/gzread.c" />
+    <ClCompile Include="yosys/libs/zlib/gzwrite.c" />
+    <ClCompile Include="yosys/libs/zlib/infback.c" />
+    <ClCompile Include="yosys/libs/zlib/inffast.c" />
+    <ClCompile Include="yosys/libs/zlib/inflate.c" />
+    <ClCompile Include="yosys/libs/zlib/inftrees.c" />
+    <ClCompile Include="yosys/libs/zlib/trees.c" />
+    <ClCompile Include="yosys/libs/zlib/uncompr.c" />
+    <ClCompile Include="yosys/libs/zlib/zutil.c" />
+    <ClCompile Include="yosys/kernel/version.cc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

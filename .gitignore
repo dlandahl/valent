@@ -8,6 +8,8 @@ vivado_project/riscv_netlist.edn
 vivado_project/riscv_netlist.v
 prjxray/
 *.obj
-*.lib
 *.exp
 */.build/*
+
+.vs/
+x64/

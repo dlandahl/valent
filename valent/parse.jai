@@ -4,12 +4,17 @@
 #import "Compiler";
 #import "String";
 
+#import "Yosys";
+
 #load "typecheck.jai";
 #load "backend.jai";
 
 #run {
     set_build_options_dc(.{do_output = false});
     main();
+
+    yosys_setup();
+    yosys_banner();
 }
 
 main :: () {
