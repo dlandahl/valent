@@ -7,19 +7,10 @@
 
 #import "Yosys";
 
-BACKEND: enum {
-    VERILOG;
-    RTLIL;
-} : .VERILOG;
-
 #load "typecheck.jai";
 #load "parse.jai";
-
-#if BACKEND == .VERILOG {
-    #load "verilog_backend.jai";
-} else {
-    #load "rtlil_backend.jai";
-}
+#load "verilog_backend.jai";
+// #load "rtlil_backend.jai";
 
 #assert OS == .WINDOWS;
 
@@ -33,15 +24,33 @@ BACKEND: enum {
 }
 
 main :: () {
-    file := read_entire_file("examples/simple.valent");
+    tokens := tokenize(TEST);
 
-    tokens := tokenize(file);
     ast := parse(tokens);
 
     if !context.parser.error {
-        top := compile(ast, "Blinky");
-        verilog := generate(top);
+        ast = typecheck(ast, top = "blink");
+        verilog := generate(ast);
 
         print(verilog);
     }
 }
+
+TEST :: #string END
+
+blink :: chip (clk: wire, reset: wire) -> led: flipflop {
+    counter: flipflop[18];
+
+    sequential(clk) if reset {
+        counter <= 0;
+        led <= 0;
+    } else {
+        counter <= counter + 1;
+
+        if counter == 0 {
+            led <= !led;
+        }
+    }
+}
+
+END;

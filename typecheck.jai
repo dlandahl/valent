@@ -2,7 +2,7 @@
 #import "Hash_Table";
 #import "Yosys";
 
-compile :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
+typecheck :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
 
     for top_level.statements {
         // Todo: check for duplicate names at top level
@@ -15,15 +15,17 @@ compile :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
             decl.datatype.primitive = .CHIP;
             decl.typechecked = true;
 
-            compile_top(cast(*Ast_Chip) decl.initialisation_value);
+            typecheck_chip(cast(*Ast_Chip) decl.initialisation_value);
             return decl;
         }
     }
 
+    semantic_error(top_level, "top module '%' was not found in the provided program", top);
+
     return null;
 }
 
-compile_top :: (chip: *Ast_Chip) {
+typecheck_chip :: (chip: *Ast_Chip) {
     assert(chip.constant_parameters.count == 0, "To do");
 
     for chip.inputs {

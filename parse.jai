@@ -936,7 +936,7 @@ tokenize :: (source: string) -> [] Token {
         return source[cursor];
     }
 
-    last_line_start: int;
+    last_line_start: int = -1;
     start: int;
     line: int;
 
@@ -969,11 +969,11 @@ tokenize :: (source: string) -> [] Token {
 
     while true {
         while current() == #char " " || current() == #char "\r" || current() == #char "\n" {
-            cursor += 1;
             if current() == #char "\n"  {
                 last_line_start = cursor;
                 line += 1;
             }
+            cursor += 1;
         }
 
         start = cursor;
