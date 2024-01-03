@@ -30,6 +30,7 @@ typecheck_chip :: (chip: *Ast_Chip) {
 
     for chip.inputs {
         evaluate_type_expression(it.type_expression);
+        it.datatype = it.type_expression.datatype;
 
         if it.type_expression.datatype.primitive != .WIRE {
             semantic_error(it, "each input port of a chip must a be wire or a bus of wires");
@@ -38,6 +39,7 @@ typecheck_chip :: (chip: *Ast_Chip) {
 
     for chip.outputs {
         evaluate_type_expression(it.type_expression);
+        it.datatype = it.type_expression.datatype;
 
         // Todo: say what the type was
         if it.type_expression.datatype.primitive != .WIRE && it.type_expression.datatype.primitive != .FLIPFLOP {

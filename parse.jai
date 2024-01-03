@@ -548,10 +548,12 @@ parse_expression :: (precedence := -9999) -> *Ast_Node {
 
     while true {
         next := peek();
-        is_binop := next > ._BEGIN_OPERATORS && next < ._END_OPERATORS;
-        has_higher_precedence := is_binop && precedence_lookup[next] > precedence;
 
-        if !is_binop || !has_higher_precedence break;
+        is_binop := next > ._BEGIN_OPERATORS && next < ._END_OPERATORS;
+        if !is_binop break;
+
+        has_higher_precedence := precedence_lookup[next] > precedence;
+        if !has_higher_precedence break;
 
         allow(next);
         op := Make_Ast(Ast_Binary_Op);
