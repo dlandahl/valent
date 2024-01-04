@@ -100,18 +100,20 @@ extern "C" {
         return (RTLIL_Signal *)result;
     }
 
-    __declspec(dllexport) RTLIL_Process rtlil_add_process(RTLIL_Module *module, const char *name, bool sequential, RTLIL_Signal *sync) {
+    __declspec(dllexport) RTLIL_Process *rtlil_add_process(RTLIL_Module *module, const char *name, bool sequential, RTLIL_Signal *sync) {
         RTLIL::Module *_module = (RTLIL::Module *)module;
-        RTLIL::Process *proc = _module->addProcess(stringf("$proc$%s", name));
+        RTLIL::Process *proc = _module->addProcess(name);
         RTLIL::SyncRule *syncrule = new RTLIL::SyncRule;
 
         syncrule->type = sequential ? RTLIL::STp : RTLIL::STa;
 
-        RTLIL::SigSpec _sync = *(RTLIL::SigSpec *)sync;
         if (sequential) {
+            RTLIL::SigSpec _sync = *(RTLIL::SigSpec *)sync;
             syncrule->signal = _sync;
         }
         proc->syncs.push_back(syncrule);
+
+        return (RTLIL_Process *)proc;
     }
 
     __declspec(dllexport) RTLIL_Signal *rtlil_signal_by_name(RTLIL_Module *module, const char *name) {
@@ -121,5 +123,32 @@ extern "C" {
 
         RTLIL::SigSpec* result = new RTLIL::SigSpec(wire);
         return (RTLIL_Signal*)result;
+    }
+
+    __declspec(dllexport) void rtlil_switch_test(RTLIL_Module *module, RTLIL_Process *process, RTLIL_Signal *condition, RTLIL_Signal* counter) {
+        RTLIL::Module *_module = (RTLIL::Module *)module;
+        RTLIL::Process *_process = (RTLIL::Process *)process;
+
+        RTLIL::SwitchRule *sw = new RTLIL::SwitchRule;
+        sw->signal = *(RTLIL::SigSpec *)condition;
+        _process->root_case.switches.push_back(sw);
+
+        auto counter_next = rtlil_signal_from_wire(rtlil_add_wire(module, "$counter_next", 5, 0, false, false));
+
+        auto increment = rtlil_add_binary_cell(_module, "$add", counter, rtlil_signal_from_constant(1, 5), 5, 0);
+        auto decrement = rtlil_add_binary_cell(_module, "$sub", counter, rtlil_signal_from_constant(1, 5), 5, 0);
+
+        RTLIL::CaseRule *c1 = new RTLIL::CaseRule;
+        c1->compare.push_back(RTLIL::Const(0, 1));
+        c1->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec*)counter_next, *(RTLIL::SigSpec*)increment));
+
+        RTLIL::CaseRule *c2 = new RTLIL::CaseRule;
+        c2->compare.push_back(RTLIL::Const(1, 1));
+        c2->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec*)counter_next, *(RTLIL::SigSpec*)decrement));
+
+        sw->cases.push_back(c1);
+        sw->cases.push_back(c2);
+
+        _process->syncs.at(0)->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec*)counter, *(RTLIL::SigSpec*)counter_next));
     }
 }

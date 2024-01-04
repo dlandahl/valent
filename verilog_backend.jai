@@ -155,10 +155,10 @@ generate_expression :: (expr: *Ast_Node) {
             generate_expression(op.right);
             write_verilog("]");
         } else {
-            ops := string.["-", "+", "*", "/", "|", "<", ">", "==", "||"];
+            info := get_operator_info(op.operation);
 
             generate_expression(op.left);
-            write_verilog(" % ", ops[op.operation - ._BEGIN_OPERATORS - 1]);
+            write_verilog(" % ", info.verilog_string);
             generate_expression(op.right);
         }
 

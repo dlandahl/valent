@@ -3,7 +3,7 @@
     current_module: *Rtlil_Module;
 }
 
-generate :: (top: *Ast_Declaration) -> string {
+generate :: (top: *Ast_Declaration) {
     rtlil_initialise_design();
     module := rtlil_add_module(to_c_string(tprint("$%", top.name)));
 
@@ -68,8 +68,8 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
         left := generate_expression(op.left);
         right := generate_expression(op.right);
 
-        ops :: string.["$sub", "$add", "$mul", "$div", "$or", "$lt", "$gt", "$eq", "$logic_or"];
-        cell_type := to_c_string(ops[op.operation - ._BEGIN_OPERATORS - 1]);
+        info := get_operator_info(op.operation);
+        cell_type := to_c_string(info.rtlil_cell_type);
 
         width := max(op.left.datatype.bit_width, op.right.datatype.bit_width);
         if op.operation == .OPERATOR_ADD      width += 1;
@@ -84,4 +84,5 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
     }
 
     assert(false);
+    return null;
 }

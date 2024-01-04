@@ -273,95 +273,39 @@ stringify_statement :: (ast: *Ast_Node) -> string {
     return "";
 }
 
-stringify_token :: (token: Token_Kind) -> string {
-    if token == {
-        case .COLON;                 return "Colon (:)";
-        case .DOT;                   return "Dot (.)";
-        case .OPERATOR_SUBTRACT;     return "Minus (-)";
-        case .OPERATOR_ADD;          return "Plus (+)";
-        case .OPERATOR_MULTIPLY;     return "Asterisk (*)";
-        case .OPERATOR_DIVIDE;       return "Slash (/)";
-        case .COMMA;                 return "Comma (,)";
-        case .OPERATOR_BIT_OR;       return "Vertical Bar (|)";
-        case .SEMICOLON;             return "Semicolon (;)";
-        case .EQUALS;                return "Equals (=)";
-        case .EXCLAMATION_MARK;      return "Exclamation Mark (!)";
-        case .OPERATOR_LESS_THAN;    return "Less Than (<)";
-        case .OPERATOR_GREATER_THAN; return "Greater Than (>)";
-        case .OPEN_PAREN;            return "Open Parenthesis (()";
-        case .CLOSED_PAREN;          return "Closed Parenthesis ())";
-        case .OPEN_BRACKET;          return "Open Bracket ([)";
-        case .CLOSED_BRACKET;        return "Closed Bracket (])";
-        case .OPEN_BRACE;            return "Open Brace ({)";
-        case .CLOSED_BRACE;          return "Closed Brace (})";
-        case .DOUBLE_COLON;          return "Double Colon (::)";
-        case .OPERATOR_EQUALS;       return "Double Equals (==)";
-        case .OPERATOR_LOGICAL_OR;   return "Logical Or (||)";
-        case .ARROW;                 return "Arrow (->)";
-        case .SEQUENTIAL_ASSIGNMENT; return "Sequential Assignment (<=)";
-        case .IDENTIFIER;            return "Identifier";
-        case .INTEGER;               return "Integer";
-        case .KEYWORD_chip;          return "Keyword 'chip'";
-        case .KEYWORD_function;      return "Keyword 'function'";
-        case .KEYWORD_struct;        return "Keyword 'struct'";
-        case .KEYWORD_enum;          return "Keyword 'enum'";
-        case .KEYWORD_combinational; return "Keyword 'combinational'";
-        case .KEYWORD_sequential;    return "Keyword 'sequential'";
-        case .KEYWORD_external;      return "Keyword 'external'";
-        case .KEYWORD_using;         return "Keyword 'using'";
-        case .KEYWORD_for;           return "Keyword 'for'";
-        case .KEYWORD_if;            return "Keyword 'if'";
-        case .KEYWORD_else;          return "Keyword 'else'";
-        case .KEYWORD_in;            return "Keyword 'in'";
-        case .KEYWORD_out;           return "Keyword 'out'";
-        case .ERROR;                 return "(Unrecognised token)";
-        case .EOT;                   return "End Of Text";
+operator_info :: Binary_Operator_Info.[
+    .{ .OPERATOR_ADD,              "+",  "$add",       6    },
+    .{ .OPERATOR_SUBTRACT,         "-",  "$sub",       6    },
+    .{ .OPERATOR_MULTIPLY,         "*","  $mul",       7    },
+    .{ .OPERATOR_DIVIDE,           "/",  "$div",       7    },
+    .{ .OPERATOR_MODULO,           "%",  "$mod",       7    },
+    .{ .OPERATOR_BIT_OR,           "|",  "$or",        1.5  },
+    .{ .OPERATOR_BIT_AND,          "&",  "$and",       3    },
+    .{ .OPERATOR_BIT_XOR,          "^",  "$xor",       2    },
+    .{ .OPERATOR_LESS_THAN,        "<",  "$lt",        5    },
+    .{ .OPERATOR_GREATER_OR_EQUAL, ">=", "$ge",        5    },
+    .{ .OPERATOR_LESS_OR_EQUAL,    "<=", "$le",        5    },
+    .{ .OPERATOR_GREATER_THAN,     ">",  "$gt",        5    },
+    .{ .OPERATOR_EQUALS,           "==", "$eq",        4    },
+    .{ .OPERATOR_NOT_EQUAL,        "!=", "$ne",        4    },
+    .{ .OPERATOR_LOGICAL_OR,       "||", "$logic_or",  1    },
+    .{ .OPERATOR_LOGICAL_AND,      "&&", "$logic_and", 1.25 },
+    .{ .OPERATOR_SHIFT_LEFT,       "<<", "$shl",       5.5  },
+    .{ .OPERATOR_SHIFT_RIGHT,      ">>", "$shr",       5.5  },
+];
 
-        case;
-            assert(false, tprint("Tried to stringify token %\n", token));
-            return "";
-    }
+Binary_Operator_Info :: struct {
+    token: Token_Kind;
+    verilog_string: string;
+    rtlil_cell_type: string;
+    precedence: float;
 }
 
-Datatype :: struct {
+get_operator_info :: (token: Token_Kind) -> *Binary_Operator_Info {
+    for *operator_info if it.token == token return it;
 
-    // Kind :: enum {
-    //     INVALID;
-    //     PRIMITIVE;
-    //     STRUCT;
-    //     ENUM;
-    //     ARRAY;
-    // }
-
-    Primitive :: enum {
-        INVALID;
-        CONSTANT;
-        WIRE;
-        LATCH;
-        FLIPFLOP;
-        CHIP;
-        CHIP_INSTANTIATION;
-        _COUNT;
-    }
-
-    primitive: Primitive;
-    bit_width: int; // -1 means constant with no specific width
-}
-
-#no_reset precedence_lookup: [Token_Kind._END_OPERATORS] int;
-
-#run {
-    using Token_Kind;
-    precedence_lookup[OPERATOR_LOGICAL_OR]    = 1;
-    // precedence_lookup[OPERATOR_LOGICAL_AND]   = 2;
-    precedence_lookup[OPERATOR_BIT_OR]        = 3;
-    precedence_lookup[OPERATOR_EQUALS]        = 4;
-    precedence_lookup[OPERATOR_LESS_THAN]     = 5;
-    precedence_lookup[OPERATOR_GREATER_THAN]  = 5;
-    precedence_lookup[OPERATOR_SUBTRACT]      = 6;
-    precedence_lookup[OPERATOR_ADD]           = 6;
-    precedence_lookup[OPERATOR_MULTIPLY]      = 7;
-    precedence_lookup[OPERATOR_DIVIDE]        = 7;
+    assert(false);
+    return null;
 }
 
 parse :: (tokens: [] Token) -> *Ast_Block {
@@ -434,9 +378,9 @@ parse_statement :: () -> *Ast_Node {
         }
 
 
-        if peek(.EQUALS, .SEQUENTIAL_ASSIGNMENT, distance = 2) {
+        if peek(.EQUALS, .OPERATOR_LESS_OR_EQUAL, distance = 2) {
             ident := expect(.IDENTIFIER);
-            op := expect(.EQUALS, .SEQUENTIAL_ASSIGNMENT);
+            op := expect(.EQUALS, .OPERATOR_LESS_OR_EQUAL);
 
             ass := Make_Ast(Ast_Assignment);
 
@@ -543,7 +487,7 @@ parse_declaration :: () -> *Ast_Declaration {
     return decl;
 }
 
-parse_expression :: (precedence := -9999) -> *Ast_Node {
+parse_expression :: (precedence: float = -1.0) -> *Ast_Node {
     left := parse_factor();
 
     while true {
@@ -552,13 +496,14 @@ parse_expression :: (precedence := -9999) -> *Ast_Node {
         is_binop := next > ._BEGIN_OPERATORS && next < ._END_OPERATORS;
         if !is_binop break;
 
-        has_higher_precedence := precedence_lookup[next] > precedence;
+        next_precedence := get_operator_info(next).precedence;
+        has_higher_precedence := next_precedence > precedence;
         if !has_higher_precedence break;
 
         allow(next);
         op := Make_Ast(Ast_Binary_Op);
 
-        right := parse_expression(precedence_lookup[next]);
+        right := parse_expression(next_precedence);
 
         op.operation = next;
         op.left = left;
@@ -850,15 +795,24 @@ Token_Kind :: enum {
     INVALID;
 
     _BEGIN_OPERATORS;
-    OPERATOR_SUBTRACT;
     OPERATOR_ADD;
+    OPERATOR_SUBTRACT;
     OPERATOR_MULTIPLY;
     OPERATOR_DIVIDE;
+    OPERATOR_MODULO;
     OPERATOR_BIT_OR;
+    OPERATOR_BIT_AND;
+    OPERATOR_BIT_XOR;
     OPERATOR_LESS_THAN;
+    OPERATOR_GREATER_OR_EQUAL;
+    OPERATOR_LESS_OR_EQUAL;
     OPERATOR_GREATER_THAN;
     OPERATOR_EQUALS;
+    OPERATOR_NOT_EQUAL;
     OPERATOR_LOGICAL_OR;
+    OPERATOR_LOGICAL_AND;
+    OPERATOR_SHIFT_LEFT;
+    OPERATOR_SHIFT_RIGHT;
     _END_OPERATORS;
 
     COLON;
@@ -876,7 +830,6 @@ Token_Kind :: enum {
     CLOSED_BRACE;
 
     ARROW;
-    SEQUENTIAL_ASSIGNMENT;
     DOUBLE_COLON;
 
     IDENTIFIER;
@@ -991,8 +944,8 @@ tokenize :: (source: string) -> [] Token {
           case #char "]"; Emit(.CLOSED_BRACKET);
           case #char "{"; Emit(.OPEN_BRACE);
           case #char "}"; Emit(.CLOSED_BRACE);
-          case #char ">"; Emit(.OPERATOR_GREATER_THAN);
-          case #char "!"; Emit(.EXCLAMATION_MARK);
+          case #char "%"; Emit(.OPERATOR_MODULO);
+          case #char "^"; Emit(.OPERATOR_BIT_XOR);
           case #char "~"; Emit(.TILDE);
 
           case #char "|";
@@ -1001,6 +954,22 @@ tokenize :: (source: string) -> [] Token {
             else {
                 cursor -= 1;
                 Emit(.OPERATOR_BIT_OR);
+            }
+
+          case #char "!";
+            cursor += 1;
+            if current() == #char "="  Emit(.OPERATOR_NOT_EQUAL);
+            else {
+                cursor -= 1;
+                Emit(.EXCLAMATION_MARK);
+            }
+
+          case #char "&";
+            cursor += 1;
+            if current() == #char "&"  Emit(.OPERATOR_LOGICAL_AND);
+            else {
+                cursor -= 1;
+                Emit(.OPERATOR_BIT_AND);
             }
 
           case #char ":";
@@ -1027,9 +996,18 @@ tokenize :: (source: string) -> [] Token {
                 Emit(.EQUALS);
             }
 
+          case #char ">";
+            cursor += 1;
+            if current() == #char "="  Emit(.OPERATOR_GREATER_OR_EQUAL);
+            else {
+                cursor -= 1;
+                Emit(.OPERATOR_GREATER_THAN);
+            }
+
           case #char "<";
             cursor += 1;
-            if current() == #char "="  Emit(.SEQUENTIAL_ASSIGNMENT);
+            if      current() == #char "="  Emit(.OPERATOR_LESS_OR_EQUAL);
+            else if current() == #char "<"  Emit(.OPERATOR_SHIFT_LEFT);
             else {
                 cursor -= 1;
                 Emit(.OPERATOR_LESS_THAN);
@@ -1146,6 +1124,55 @@ tokenize :: (source: string) -> [] Token {
     }
 
     return result;
+}
+
+stringify_token :: (token: Token_Kind) -> string {
+    if token == {
+        case .COLON;                 return "Colon (:)";
+        case .DOT;                   return "Dot (.)";
+        case .OPERATOR_SUBTRACT;     return "Minus (-)";
+        case .OPERATOR_ADD;          return "Plus (+)";
+        case .OPERATOR_MULTIPLY;     return "Asterisk (*)";
+        case .OPERATOR_DIVIDE;       return "Slash (/)";
+        case .COMMA;                 return "Comma (,)";
+        case .OPERATOR_BIT_OR;       return "Vertical Bar (|)";
+        case .SEMICOLON;             return "Semicolon (;)";
+        case .EQUALS;                return "Equals (=)";
+        case .EXCLAMATION_MARK;      return "Exclamation Mark (!)";
+        case .OPERATOR_LESS_THAN;    return "Less Than (<)";
+        case .OPERATOR_GREATER_THAN; return "Greater Than (>)";
+        case .OPEN_PAREN;            return "Open Parenthesis (()";
+        case .CLOSED_PAREN;          return "Closed Parenthesis ())";
+        case .OPEN_BRACKET;          return "Open Bracket ([)";
+        case .CLOSED_BRACKET;        return "Closed Bracket (])";
+        case .OPEN_BRACE;            return "Open Brace ({)";
+        case .CLOSED_BRACE;          return "Closed Brace (})";
+        case .DOUBLE_COLON;          return "Double Colon (::)";
+        case .OPERATOR_EQUALS;       return "Double Equals (==)";
+        case .OPERATOR_LOGICAL_OR;   return "Logical Or (||)";
+        case .ARROW;                 return "Arrow (->)";
+        case .IDENTIFIER;            return "Identifier";
+        case .INTEGER;               return "Integer";
+        case .KEYWORD_chip;          return "Keyword 'chip'";
+        case .KEYWORD_function;      return "Keyword 'function'";
+        case .KEYWORD_struct;        return "Keyword 'struct'";
+        case .KEYWORD_enum;          return "Keyword 'enum'";
+        case .KEYWORD_combinational; return "Keyword 'combinational'";
+        case .KEYWORD_sequential;    return "Keyword 'sequential'";
+        case .KEYWORD_external;      return "Keyword 'external'";
+        case .KEYWORD_using;         return "Keyword 'using'";
+        case .KEYWORD_for;           return "Keyword 'for'";
+        case .KEYWORD_if;            return "Keyword 'if'";
+        case .KEYWORD_else;          return "Keyword 'else'";
+        case .KEYWORD_in;            return "Keyword 'in'";
+        case .KEYWORD_out;           return "Keyword 'out'";
+        case .ERROR;                 return "(Unrecognised token)";
+        case .EOT;                   return "End Of Text";
+
+        case;
+            assert(false, tprint("Tried to stringify token %\n", token));
+            return "";
+    }
 }
 
 lookup_keyword :: (ident: string) -> Token_Kind {
