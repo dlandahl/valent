@@ -38,6 +38,7 @@ generate :: (top: *Ast_Declaration) {
     for chip.statements {
         if it.kind == .COMBINATIONAL_CIRCUIT {
             comb := cast(*Ast_Combinational_Circuit) it;
+
             for comb.block.statements if it.kind == .ASSIGNMENT {
                 ass := cast(*Ast_Assignment) it;
                 ident := cast(*Ast_Identifier) ass.target;
@@ -45,8 +46,13 @@ generate :: (top: *Ast_Declaration) {
                 target := rtlil_signal_by_name(module, to_c_string(tprint("$%", ident.name)));
                 source := generate_expression(ass.expr);
 
-                rtlil_connect_signals(context.rtlil.current_module, target, source);
+                rtlil_connect(context.rtlil.current_module, target, source);
             }
+        }
+
+        if it.kind == .SEQUENTIAL_CIRCUIT {
+            seq := cast(*Ast_Sequential_Circuit) it;
+            generate_process(seq);
         }
     }
 
@@ -56,12 +62,36 @@ generate :: (top: *Ast_Declaration) {
     yosys_run_pass("dump");
 }
 
+generate_process :: (seq: *Ast_Sequential_Circuit) {
+    using context.rtlil;
+
+    sync_name := to_c_string(tprint("$%", seq.clock.name));
+    sync := rtlil_signal_by_name(current_module, sync_name);
+    process := rtlil_add_process(current_module, "$sequential", true, sync);
+
+    for seq.block.statements {
+        if it.kind == .ASSIGNMENT {
+            ass := cast(*Ast_Assignment) it;
+            ident := cast(*Ast_Identifier) ass.target;
+
+            wire_name := tprint("$%", ident.name);
+            next := rtlil_add_wire(current_module, to_c_string(tprint("%_next", wire_name)), 1);
+
+            target := rtlil_signal_by_name(current_module, to_c_string(wire_name));
+            source := generate_expression(ass.expr);
+
+            rtlil_connect(current_module, next, source);
+            rtlil_add_sync_action(process, target, next);
+        }
+    }
+}
+
 generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
     if expr.kind == {
       case .LITERAL;
         lit := cast(*Ast_Literal) expr;
         width := ifx lit.bit_width == -1 then 32 else lit.bit_width;
-        return rtlil_signal_from_constant(xx lit.int_value, xx width);
+        return rtlil_constant(xx lit.int_value, xx width);
 
       case .BINARY_OP;
         op := cast(*Ast_Binary_Op) expr;

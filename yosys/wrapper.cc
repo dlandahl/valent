@@ -5,9 +5,10 @@
 using namespace Yosys;
 
 typedef void RTLIL_Module;
-typedef void RTLIL_Wire;
 typedef void RTLIL_Process;
 typedef void RTLIL_Signal;
+typedef void RTLIL_Switch;
+typedef void RTLIL_Case;
 
 extern "C" {
     __declspec(dllexport) void rtlil_initialise_design() {
@@ -29,7 +30,6 @@ extern "C" {
 
         RTLIL::Module *module = new RTLIL::Module;
         module->name = std::string(name);
-
         return module;
     }
 
@@ -39,34 +39,27 @@ extern "C" {
         yosys_design->add(_module);
     }
 
-    __declspec(dllexport) RTLIL_Wire *rtlil_add_wire(RTLIL_Module *module, const char *name, int width, int port_id, bool input, bool output) {
+    __declspec(dllexport) RTLIL_Signal *rtlil_add_wire(RTLIL_Module *module, const char *name, int width, int port_id, bool input, bool output) {
 
         RTLIL::Module *_module = (RTLIL::Module *)module;
-        RTLIL::IdString id = std::string(name);
-        RTLIL::Wire *wire = _module->addWire(id, width);
+        RTLIL::Wire *wire = _module->addWire(name, width);
 
         wire->port_id = port_id;
         wire->port_input = input;
         wire->port_output = output;
 
-        return wire;
-    }
-
-    __declspec(dllexport) RTLIL_Signal *rtlil_signal_from_wire(RTLIL_Wire *wire) {
-
-        RTLIL::Wire *_wire = (RTLIL::Wire *)wire;
-        RTLIL::SigSpec* result = new RTLIL::SigSpec(_wire);
+        RTLIL::SigSpec* result = new RTLIL::SigSpec(wire);
         return (RTLIL_Signal*)result;
     }
 
-    __declspec(dllexport) RTLIL_Signal *rtlil_signal_from_constant(int value, int width) {
+    __declspec(dllexport) RTLIL_Signal *rtlil_constant(int value, int width) {
 
         RTLIL::Const _const(value, width);
         RTLIL::SigSpec* result = new RTLIL::SigSpec(_const);
         return (RTLIL_Signal*)result;
     }
 
-    __declspec(dllexport) void rtlil_connect_signals(RTLIL_Module *module, RTLIL_Signal *left, RTLIL_Signal *right) {
+    __declspec(dllexport) void rtlil_connect(RTLIL_Module *module, RTLIL_Signal *left, RTLIL_Signal *right) {
 
         RTLIL::Module *_module =  (RTLIL::Module *)module;
         RTLIL::SigSpec _right  = *(RTLIL::SigSpec *)right;
@@ -118,11 +111,10 @@ extern "C" {
 
     __declspec(dllexport) RTLIL_Signal *rtlil_signal_by_name(RTLIL_Module *module, const char *name) {
         RTLIL::Module *_module = (RTLIL::Module *)module;
-        IdString id = std::string(name);
-        Wire *wire = _module->wires_.at(id);
+        Wire *wire = _module->wires_.at(name);
 
-        RTLIL::SigSpec* result = new RTLIL::SigSpec(wire);
-        return (RTLIL_Signal*)result;
+        RTLIL::SigSpec *result = new RTLIL::SigSpec(wire);
+        return (RTLIL_Signal *)result;
     }
 
     __declspec(dllexport) void rtlil_switch_test(RTLIL_Module *module, RTLIL_Process *process, RTLIL_Signal *condition, RTLIL_Signal* counter) {
@@ -133,22 +125,57 @@ extern "C" {
         sw->signal = *(RTLIL::SigSpec *)condition;
         _process->root_case.switches.push_back(sw);
 
-        auto counter_next = rtlil_signal_from_wire(rtlil_add_wire(module, "$counter_next", 5, 0, false, false));
+        auto counter_next = rtlil_add_wire(module, "$counter_next", 5, 0, false, false);
 
-        auto increment = rtlil_add_binary_cell(_module, "$add", counter, rtlil_signal_from_constant(1, 5), 5, 0);
-        auto decrement = rtlil_add_binary_cell(_module, "$sub", counter, rtlil_signal_from_constant(1, 5), 5, 0);
+        auto increment = rtlil_add_binary_cell(_module, "$add", counter, rtlil_constant(1, 5), 5, 0);
+        auto decrement = rtlil_add_binary_cell(_module, "$sub", counter, rtlil_constant(1, 5), 5, 0);
 
         RTLIL::CaseRule *c1 = new RTLIL::CaseRule;
         c1->compare.push_back(RTLIL::Const(0, 1));
-        c1->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec*)counter_next, *(RTLIL::SigSpec*)increment));
+        c1->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)counter_next, *(RTLIL::SigSpec *)increment));
 
         RTLIL::CaseRule *c2 = new RTLIL::CaseRule;
         c2->compare.push_back(RTLIL::Const(1, 1));
-        c2->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec*)counter_next, *(RTLIL::SigSpec*)decrement));
+        c2->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)counter_next, *(RTLIL::SigSpec *)decrement));
 
         sw->cases.push_back(c1);
         sw->cases.push_back(c2);
 
-        _process->syncs.at(0)->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec*)counter, *(RTLIL::SigSpec*)counter_next));
+        _process->syncs.at(0)->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)counter, *(RTLIL::SigSpec *)counter_next));
+    }
+
+    __declspec(dllexport) RTLIL_Switch *rtlil_add_switch(RTLIL_Process *process, RTLIL_Case *optional_parent, RTLIL_Signal *condition) {
+        RTLIL::Process *_process = (RTLIL::Process *)process;
+
+        RTLIL::SwitchRule *sw = new RTLIL::SwitchRule;
+        sw->signal = *(RTLIL::SigSpec *)condition;
+
+        if (optional_parent != NULL) {
+            RTLIL::CaseRule *parent = (RTLIL::CaseRule *)optional_parent;
+            parent->switches.push_back(sw);
+        } else {
+            _process->root_case.switches.push_back(sw);
+        }
+
+        return (RTLIL_Switch *)sw;
+    }
+
+    __declspec(dllexport) RTLIL_Case *rtlil_add_case(RTLIL_Switch *parent, RTLIL_Signal *comparison) {
+        RTLIL::CaseRule *c = new RTLIL::CaseRule;
+        RTLIL::SwitchRule *sw = (RTLIL::SwitchRule *)parent;
+
+        sw->cases.push_back(c);
+        c->compare.push_back(*(RTLIL::SigSpec *)comparison);
+        return (RTLIL_Case *)c;
+    }
+
+    __declspec(dllexport) void rtlil_add_action(RTLIL_Case *parent, RTLIL_Signal *lhs, RTLIL_Signal *rhs) {
+        RTLIL::CaseRule *c = (RTLIL::CaseRule *)parent;
+        c->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)lhs, *(RTLIL::SigSpec *)rhs));
+    }
+
+    __declspec(dllexport) void rtlil_add_sync_action(RTLIL_Process *process, RTLIL_Signal *lhs, RTLIL_Signal *rhs) {
+        RTLIL::Process *_process = (RTLIL::Process *)process;
+        _process->syncs.at(0)->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)lhs, *(RTLIL::SigSpec *)rhs));
     }
 }
