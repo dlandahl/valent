@@ -60,6 +60,7 @@ generate :: (top: *Ast_Declaration) {
     rtlil_done();
 
     yosys_run_pass("dump");
+    yosys_run_pass("proc; opt; write_verilog");
 }
 
 generate_process :: (seq: *Ast_Sequential_Circuit) {
@@ -69,24 +70,72 @@ generate_process :: (seq: *Ast_Sequential_Circuit) {
     sync := rtlil_signal_by_name(current_module, sync_name);
     process := rtlil_add_process(current_module, "$sequential", true, sync);
 
-    for seq.block.statements {
+    generate_sequential_block(seq.block, process, null);
+}
+
+generate_sequential_block :: (block: *Ast_Block, process: *Rtlil_Process, parent: *Rtlil_Case) {
+    using context.rtlil;
+
+    for block.statements {
         if it.kind == .ASSIGNMENT {
             ass := cast(*Ast_Assignment) it;
             ident := cast(*Ast_Identifier) ass.target;
 
             wire_name := tprint("$%", ident.name);
-            next := rtlil_add_wire(current_module, to_c_string(tprint("%_next", wire_name)), 1);
+            next_name := to_c_string(tprint("%_next", wire_name));
+
+            next := rtlil_signal_by_name(current_module, next_name);
+            already_exists := next != null;
+
+            if !already_exists {
+                next = rtlil_add_wire(current_module, next_name, 1);
+            }
 
             target := rtlil_signal_by_name(current_module, to_c_string(wire_name));
             source := generate_expression(ass.expr);
 
-            rtlil_connect(current_module, next, source);
-            rtlil_add_sync_action(process, target, next);
+            if !parent {
+                rtlil_connect(current_module, next, source);
+            } else {
+                if !already_exists {
+                    rtlil_add_root_action(process, next, target);
+                }
+
+                rtlil_add_action(parent, next, source);
+            }
+
+            if !already_exists {
+                rtlil_add_sync_action(process, target, next);
+            }
+        }
+
+        if it.kind == .IF {
+            _if := cast(*Ast_If) it;
+
+            comparison: Ast_Binary_Op;
+            comparison.operation = .OPERATOR_GREATER_THAN;
+            comparison.left = _if.condition;
+
+            lit: Ast_Literal;
+            lit.int_value = 0;
+            lit.bit_width = 1;
+            comparison.right = *lit;
+
+            condition := generate_expression(*comparison);
+            sw := rtlil_add_switch(process, parent, condition);
+            c := rtlil_add_case(sw, rtlil_constant(1, 1));
+
+            generate_sequential_block(_if.block, process, c);
+            if _if.else_block != null {
+                generate_sequential_block(_if.else_block, process, parent);
+            }
         }
     }
 }
 
 generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
+    using context.rtlil;
+
     if expr.kind == {
       case .LITERAL;
         lit := cast(*Ast_Literal) expr;
@@ -105,12 +154,18 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
         if op.operation == .OPERATOR_ADD      width += 1;
         if op.operation == .OPERATOR_MULTIPLY width *= 2;
 
-        result := rtlil_add_binary_cell(context.rtlil.current_module, cell_type, left, right, width, op.location.line);
+        result := rtlil_add_binary_cell(current_module, cell_type, left, right, width, op.location.line);
+        return result;
+
+      case .UNARY_OP;
+        op := cast(*Ast_Unary_Op) expr;
+        result := generate_expression(op.argument);
+        // To do
         return result;
 
       case .IDENTIFIER;
         ident := cast(*Ast_Identifier) expr;
-        return rtlil_signal_by_name(context.rtlil.current_module, to_c_string(tprint("$%", ident.name)));
+        return rtlil_signal_by_name(current_module, to_c_string(tprint("$%", ident.name)));
     }
 
     assert(false);

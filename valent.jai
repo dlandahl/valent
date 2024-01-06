@@ -13,7 +13,7 @@
 
 #assert OS == .WINDOWS;
 
-#run main();
+// #run main();
 
 main :: () {
 
@@ -32,11 +32,10 @@ main :: () {
 
 TEST :: #string END
 
-blink :: chip (a: wire[4], b: wire) -> c: wire[5] {
-    combinational c = a + 5 - b;
-
-    ff: flipflop;
-    sequential (b) ff <= b;
+blink :: chip (input: wire, clock: wire, enable: wire) -> result: flipflop {
+    sequential (clock)
+        if enable result <= input - 5;
+        else if ~input result <= 0;
 }
 
 END;

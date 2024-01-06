@@ -23,4 +23,5 @@ rtlil_switch_test          :: (module: *Rtlil_Module, process: *Rtlil_Process, c
 rtlil_add_switch           :: (process: *Rtlil_Process, optional_parent: *Rtlil_Case, condition: *Rtlil_Signal) -> *Rtlil_Switch #foreign yosys;
 rtlil_add_case             :: (parent: *Rtlil_Switch, comparison: *Rtlil_Signal) -> *Rtlil_Case #foreign yosys;
 rtlil_add_action           :: (parent: *Rtlil_Case, lhs: *Rtlil_Signal, rhs: *Rtlil_Signal) #foreign yosys;
+rtlil_add_root_action      :: (process: *Rtlil_Process, lhs: *Rtlil_Signal, rhs: *Rtlil_Signal) #foreign yosys;
 rtlil_add_sync_action      :: (process: *Rtlil_Process, lhs: *Rtlil_Signal, rhs: *Rtlil_Signal) #foreign yosys;

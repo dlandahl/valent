@@ -111,6 +111,10 @@ extern "C" {
 
     __declspec(dllexport) RTLIL_Signal *rtlil_signal_by_name(RTLIL_Module *module, const char *name) {
         RTLIL::Module *_module = (RTLIL::Module *)module;
+        if (_module->wires_.find(name) == _module->wires_.end()) {
+            return NULL;
+        }
+
         Wire *wire = _module->wires_.at(name);
 
         RTLIL::SigSpec *result = new RTLIL::SigSpec(wire);
@@ -172,6 +176,11 @@ extern "C" {
     __declspec(dllexport) void rtlil_add_action(RTLIL_Case *parent, RTLIL_Signal *lhs, RTLIL_Signal *rhs) {
         RTLIL::CaseRule *c = (RTLIL::CaseRule *)parent;
         c->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)lhs, *(RTLIL::SigSpec *)rhs));
+    }
+
+    __declspec(dllexport) void rtlil_add_root_action(RTLIL_Process *process, RTLIL_Signal *lhs, RTLIL_Signal *rhs) {
+        RTLIL::Process *_process = (RTLIL::Process *)process;
+        _process->root_case.actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)lhs, *(RTLIL::SigSpec *)rhs));
     }
 
     __declspec(dllexport) void rtlil_add_sync_action(RTLIL_Process *process, RTLIL_Signal *lhs, RTLIL_Signal *rhs) {
