@@ -8,14 +8,15 @@
 
 #load "typecheck.jai";
 #load "parse.jai";
-// #load "verilog_backend.jai";
-#load "rtlil_backend.jai";
+#load "verilog_backend.jai";
+// #load "rtlil_backend.jai";
 
 #assert OS == .WINDOWS;
 
-// #run main();
+#run main();
 
 main :: () {
+    start_ts := current_time_monotonic();
 
     tokens := tokenize(TEST);
 
@@ -24,18 +25,23 @@ main :: () {
 
     if !context.parser.error {
         ast = typecheck(xx ast, top = "blink");
-        generate(xx ast);
 
-        // print(verilog);
+        print("Frontend time: %us\n", to_microseconds(current_time_monotonic() - start_ts));
+        start_ts = current_time_monotonic();
+
+        v := generate(xx ast);
+
+        print("Backend time: %us\n", to_microseconds(current_time_monotonic() - start_ts));
+        print(v);
     }
 }
 
 TEST :: #string END
 
 blink :: chip (input: wire, clock: wire, enable: wire) -> result: flipflop {
-    sequential (clock)
-        if enable result <= input - 5;
-        else if ~input result <= 0;
+    sequential (clock) if enable {
+        result <= input - 5;
+    }
 }
 
 END;

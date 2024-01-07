@@ -170,6 +170,7 @@ extern "C" {
 
         sw->cases.push_back(c);
         c->compare.push_back(*(RTLIL::SigSpec *)comparison);
+
         return (RTLIL_Case *)c;
     }
 

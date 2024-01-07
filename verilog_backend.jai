@@ -157,9 +157,11 @@ generate_expression :: (expr: *Ast_Node) {
         } else {
             info := get_operator_info(op.operation);
 
+            write_verilog("(");
             generate_expression(op.left);
             write_verilog(" % ", info.verilog_string);
             generate_expression(op.right);
+            write_verilog(")");
         }
 
       case .IDENTIFIER;
