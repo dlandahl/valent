@@ -4,14 +4,14 @@
 #import "File";
 #import "File_Utilities";
 
-#import "Yosys";
+// #import "Yosys";
 
 #load "typecheck.jai";
 #load "parse.jai";
 #load "verilog_backend.jai";
 // #load "rtlil_backend.jai";
 
-#assert OS == .WINDOWS;
+// #assert OS == .WINDOWS;
 
 #run main();
 
@@ -40,11 +40,13 @@ TEST :: #string END
 
 blink :: chip (input: wire, clock: wire, enable: wire) -> result: flipflop {
     sequential (clock) if enable {
-        result <= input - 5;
+        { result, result, 1'b0 } <= { input - 5, 1'b1 };
     }
 }
 
 END;
+
+/*
 
 yosys_test :: () {
     rtlil_initialise_design();
@@ -71,3 +73,5 @@ yosys_test :: () {
 
     yosys_run_pass("dump");
 }
+
+*/

@@ -1,6 +1,5 @@
 
 #import "Hash_Table";
-#import "Yosys";
 
 Datatype :: struct {
 
@@ -128,8 +127,19 @@ typecheck :: (block: *Ast_Block) {
                 case; assert(false);
             }
 
-            resolve_identifier(ass.target);
-            typecheck_declaration(ass.target.resolved_declaration);
+            lhs_type: Datatype;
+            if ass.target.kind == .IDENTIFIER {
+                ident := cast(*Ast_Identifier) ass.target;
+
+                resolve_identifier(ident);
+                typecheck_declaration(ident.resolved_declaration);
+
+                lhs_type = ident.resolved_declaration.datatype;
+            } else if ass.target.kind == .CONCAT {
+                typecheck_expression(ass.target);
+                lhs_type = ass.target.datatype;
+            }
+
             typecheck_expression(ass.expr);
 
             if block.block_type == .SEQUENTIAL && ass.target.datatype.primitive != .FLIPFLOP {
@@ -140,7 +150,7 @@ typecheck :: (block: *Ast_Block) {
                 semantic_error(ass, "combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
             }
 
-            check_bit_width(ass, ass.target.resolved_declaration.datatype, ass.expr.datatype);
+            check_bit_width(ass, lhs_type, ass.expr.datatype);
 
           case .IF;
             _if := cast(*Ast_If) it;
@@ -192,7 +202,6 @@ typecheck_expression :: (expr: *Ast_Node) {
 
         id.datatype = id.resolved_declaration.datatype;
 
-
       case .UNARY_OP;
         op := cast(*Ast_Unary_Op) expr;
         typecheck_expression(op.argument);
@@ -231,12 +240,23 @@ typecheck_expression :: (expr: *Ast_Node) {
         cat := cast(*Ast_Concat) expr;
         bit_width: int;
 
+        any_flipflops: bool;
+        any_wires: bool;
+
         for cat.fields {
             typecheck_expression(it);
+
+            if it.datatype.bit_width == -1 {
+                semantic_error(cat, "all entries of a concatenation must have an explicit width, but this one doesn't\n\n%\n\n", node_location_string(it));
+            }
             bit_width += it.datatype.bit_width;
+
+            any_flipflops ||= it.datatype.primitive == .FLIPFLOP;
+            any_wires     ||= it.datatype.primitive == .WIRE;
         }
 
         cat.datatype.bit_width = bit_width;
+        if any_flipflops && !any_wires cat.datatype.primitive = .FLIPFLOP;
     }
 }
 

@@ -166,6 +166,17 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
       case .IDENTIFIER;
         ident := cast(*Ast_Identifier) expr;
         return rtlil_signal_by_name(current_module, to_c_string(tprint("$%", ident.name)));
+
+      case .CONCAT;
+        cat := cast(*Ast_Concat) expr;
+
+        signals: [..] *Rtlil_Signal;
+        for cat.fields {
+            field_signal := generate_expression(it);
+            array_add(*signals, it);
+        }
+
+        return rtlil_concatenate_signals(signals.data, cast(s32) signals.count);
     }
 
     assert(false);

@@ -188,4 +188,15 @@ extern "C" {
         RTLIL::Process *_process = (RTLIL::Process *)process;
         _process->syncs.at(0)->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)lhs, *(RTLIL::SigSpec *)rhs));
     }
+
+    __declspec(dllexport) RTLIL_Signal *rtlil_concatenate_signals(RTLIL_Signal **signals, int count) {
+        RTLIL::SigSpec *result = new RTLIL::SigSpec;
+
+        for (int i = 0; i < count; i++) {
+            RTLIL::SigSpec *it = (RTLIL::SigSpec *)signals[i];
+            result->append(it);
+        }
+
+        return (RTLIL_Signal *)result;
+    }
 }

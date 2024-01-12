@@ -95,7 +95,8 @@ generate_statement :: (stmt: *Ast_Node) {
 
       case .ASSIGNMENT;
         ass := cast(*Ast_Assignment) stmt;
-        write_verilog(ass.target.name);
+
+        generate_expression(ass.target);
         write_verilog(ifx ass.type == .SEQUENTIAL " <= " else " = ");
         generate_expression(ass.expr);
         write_verilog(";\n");

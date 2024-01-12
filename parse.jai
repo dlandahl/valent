@@ -95,7 +95,7 @@ Ast_Assignment :: struct {
     using #as node: Ast_Node;
     node.kind = .ASSIGNMENT;
 
-    target: *Ast_Identifier;
+    target: *Ast_Node; // Concat or ident
     expr: *Ast_Node;
 
     type: enum {
@@ -366,6 +366,8 @@ parse :: (tokens: [] Token) -> *Ast_Block {
 
 parse_statement :: () -> *Ast_Node {
 
+    if peek(.OPEN_BRACE) return parse_assignment();
+
     if peek(.IDENTIFIER) {
         if peek(.COLON, .DOUBLE_COLON, distance = 2) {
             decl := parse_declaration();
@@ -377,23 +379,8 @@ parse_statement :: () -> *Ast_Node {
             return decl;
         }
 
-
         if peek(.EQUALS, .OPERATOR_LESS_OR_EQUAL, distance = 2) {
-            ident := expect(.IDENTIFIER);
-            op := expect(.EQUALS, .OPERATOR_LESS_OR_EQUAL);
-
-            ass := Make_Ast(Ast_Assignment);
-
-            ass.target = Make_Ast(Ast_Identifier);
-            ass.target.name = ident.string_value;
-            ass.target.location = ident.location;
-
-            ass.expr = parse_expression();
-            ass.type = ifx op.kind == .EQUALS then .COMBINATIONAL else .SEQUENTIAL;
-
-            expect(.SEMICOLON);
-
-            return ass;
+            return parse_assignment();
         }
 
         using context.parser;
@@ -431,6 +418,32 @@ parse_statement :: () -> *Ast_Node {
     parse_error("Wanted a statement but got token of kind %", stringify_token(tokens[token_index].kind));
 
     return null;
+}
+
+parse_assignment :: () -> *Ast_Assignment {
+    lhs: *Ast_Node;
+
+    if peek(.OPEN_BRACE) {
+        lhs = parse_concat();
+    } else {
+        ident_token := expect(.IDENTIFIER);
+
+        ident := Make_Ast(Ast_Identifier);
+        ident.name = ident_token.string_value;
+
+        lhs = ident;
+    }
+
+    op := expect(.EQUALS, .OPERATOR_LESS_OR_EQUAL);
+
+    ass := Make_Ast(Ast_Assignment);
+    ass.expr = parse_expression();
+    ass.type = ifx op.kind == .EQUALS then .COMBINATIONAL else .SEQUENTIAL;
+    ass.target = lhs;
+
+    expect(.SEMICOLON);
+
+    return ass;
 }
 
 parse_block :: (block_type: Block_Type) -> *Ast_Block {
@@ -734,7 +747,6 @@ expect :: (expected: .. Token_Kind) -> Token {
         error = true;
         wanted = array_copy(expected);
         got = new.kind;
-        assert(false);
     }
 
     return new;
