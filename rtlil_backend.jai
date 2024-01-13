@@ -173,7 +173,7 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
         signals: [..] *Rtlil_Signal;
         for cat.fields {
             field_signal := generate_expression(it);
-            array_add(*signals, it);
+            array_add(*signals, field_signal);
         }
 
         return rtlil_concatenate_signals(signals.data, cast(s32) signals.count);

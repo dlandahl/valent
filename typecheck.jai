@@ -137,6 +137,7 @@ typecheck :: (block: *Ast_Block) {
                 lhs_type = ident.resolved_declaration.datatype;
             } else if ass.target.kind == .CONCAT {
                 typecheck_expression(ass.target);
+                // Todo: check this is only 0/Z literals and wire or flipflop idents depending on block type
                 lhs_type = ass.target.datatype;
             }
 
@@ -170,6 +171,7 @@ typecheck :: (block: *Ast_Block) {
             comb := cast(*Ast_Combinational_Circuit) it;
             typecheck(comb.block);
 
+          case .JAI_CODE; // Todo
           case;
             assert(false);
         }
@@ -257,6 +259,7 @@ typecheck_expression :: (expr: *Ast_Node) {
 
         cat.datatype.bit_width = bit_width;
         if any_flipflops && !any_wires cat.datatype.primitive = .FLIPFLOP;
+        if !any_flipflops && any_wires cat.datatype.primitive = .WIRE;
     }
 }
 

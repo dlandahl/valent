@@ -39,6 +39,7 @@ Ast_Node :: struct {
         BLOCK;
         BIT_SELECT;
         CONCAT;
+        JAI_CODE;
     }
 
     kind: Kind;
@@ -64,6 +65,18 @@ Ast_Concat :: struct {
     node.kind = .CONCAT;
 
     fields: [] *Ast_Node;
+}
+
+Ast_Jai_Code :: struct {
+    using #as node: Ast_Node;
+    node.kind = .JAI_CODE;
+
+    block_type: enum {
+        GENERATE;
+        TESTBENCH;
+    }
+
+    code: string;
 }
 
 Ast_Block :: struct {
@@ -205,6 +218,8 @@ check_statement_allowed_in_block :: (ast: *Ast_Node) {
         block_type := peek(context.parser.block_stack).block_type;
         str := stringify_statement(ast);
 
+        if ast.kind == .JAI_CODE return true, "";
+
         if block_type == {
           case .TOP_LEVEL;
             if ast.kind != .DECLARATION {
@@ -267,6 +282,9 @@ stringify_statement :: (ast: *Ast_Node) -> string {
         ass := cast(*Ast_Assignment) ast;
         if ass.type == .COMBINATIONAL return "Combinational Assignment";
         return "Sequential Assignment";
+
+      case .JAI_CODE;
+        return "Jai Code";
     }
 
     assert(false);
@@ -326,7 +344,11 @@ parse :: (tokens: [] Token) -> *Ast_Block {
         }
 
         s := parse_statement();
-        if s {
+
+        if s.kind == .JAI_CODE {
+            jai := cast(*Ast_Jai_Code) s;
+            execute_jai_code(jai);
+        } else {
             check_statement_allowed_in_block(s);
             array_add(*statements, s);
         }
@@ -366,7 +388,7 @@ parse :: (tokens: [] Token) -> *Ast_Block {
 
 parse_statement :: () -> *Ast_Node {
 
-    if peek(.OPEN_BRACE) return parse_assignment();
+    if peek(.OPEN_BRACE) return parse_assignment(); // Left hand side concatenation
 
     if peek(.IDENTIFIER) {
         if peek(.COLON, .DOUBLE_COLON, distance = 2) {
@@ -412,6 +434,19 @@ parse_statement :: () -> *Ast_Node {
     if peek(.KEYWORD_combinational) {
         comb := parse_combinational_statement();
         return comb;
+    }
+
+    if allow(.KEYWORD_generate) {
+        expect(.OPEN_BRACE);
+
+        jai := Make_Ast(Ast_Jai_Code);
+        expect(.JAI_CODE);
+
+        jai.block_type = .GENERATE;
+        jai.code = current_token().string_value;
+
+        expect(.CLOSED_BRACE);
+        return jai;
     }
 
     using context.parser;
@@ -466,13 +501,18 @@ parse_block :: (block_type: Block_Type) -> *Ast_Block {
     while true {
         if multi_line if allow(.CLOSED_BRACE) break;
 
-        statement := parse_statement();
+        s := parse_statement();
         if context.parser.error break;
 
-        check_statement_allowed_in_block(statement);
-        if context.parser.error break;
+        if s.kind == .JAI_CODE {
+            jai := cast(*Ast_Jai_Code) s;
+            execute_jai_code(jai);
+        } else {
+            check_statement_allowed_in_block(s);
+            if context.parser.error break;
 
-        array_add(*statements, statement);
+            array_add(*statements, s);
+        }
 
         if !multi_line break;
     }
@@ -482,6 +522,44 @@ parse_block :: (block_type: Block_Type) -> *Ast_Block {
     block.statements = statements;
     return block;
 }
+
+execute_jai_code :: (jai: *Ast_Jai_Code) {
+    if !#compile_time return; // Todo
+
+    #import "Compiler";
+    ws := compiler_create_workspace(
+        tprint("'Generate' block at line %", jai.location.line)
+    );
+
+    options := get_build_options(ws);
+    options.output_type = .NO_OUTPUT;
+    set_build_options(options, ws);
+
+    compiler_begin_intercept(ws);
+    add_build_string(tprint(JAI_CODE_FORMAT, jai.code), ws);
+
+    while true {
+        m := compiler_wait_for_message();
+        if m.kind == .COMPLETE break;
+
+        if m.kind == .ERROR {
+            parse_error("There has been a Jai execution or compilation failure");
+            return;
+        }
+    }
+
+    compiler_end_intercept(ws);
+}
+
+JAI_CODE_FORMAT :: #string END
+#import "Basic";
+#import "Compiler";
+
+#run {
+    set_build_options_dc(.{do_output=false});
+    %
+}
+END;
 
 parse_declaration :: () -> *Ast_Declaration {
     ident := expect(.IDENTIFIER);
@@ -864,7 +942,10 @@ Token_Kind :: enum {
     KEYWORD_else;
     KEYWORD_in;
     KEYWORD_out;
+    KEYWORD_generate;
     _END_KEYWORDS;
+
+    JAI_CODE;
 
     ERROR;
     EOT;
@@ -889,34 +970,96 @@ Source_Location :: struct {
 
 EOT : u8 : 0x4;
 
-tokenize :: (source: string) -> [] Token {
+Tokenizer :: struct {
     cursor: int;
+    source: string;
+
+    last_line_start: int = -1;
+    line: int;
+}
+
+tokenize :: (source: string) -> [] Token {
     result: [..] Token;
+
+    tokenizer: Tokenizer;
+    tokenizer.source = source;
 
     context.parser.source_code_lines = split(source, "\n");
 
     array_reserve(*result, source.count / 4);
+
+    while true {
+        token := get_next_token(*tokenizer);
+        array_add(*result, token);
+
+        if token.kind == .ERROR break;
+        if token.kind == .EOT   break;
+
+        if token.kind == .KEYWORD_generate {
+
+            token = get_next_token(*tokenizer);
+            if token.kind != .OPEN_BRACE assert(false);
+            array_add(*result, token);
+
+            Jai :: #import "Jai_Lexer";
+
+            lexer: Jai.Lexer;
+            lexer_input: string;
+            lexer_input.data = source.data + tokenizer.cursor;
+            lexer_input.count = source.count - tokenizer.cursor;
+
+            Jai.set_input_from_string(*lexer, lexer_input);
+            brace_level: int;
+
+            while true {
+                token := Jai.peek_next_token(*lexer);
+
+                if token.type == {
+                    case #char "{"; brace_level += 1;
+                    case #char "}"; brace_level -= 1;
+                    case .END_OF_INPUT; assert(false);
+                    case .ERROR; assert(false);
+                }
+
+                if brace_level < 0 break;
+
+                Jai.eat_token(*lexer);
+            }
+
+            jai_code := lexer_input;
+            jai_code.count = lexer.input_cursor-1;
+
+            jai_code_token: Token;
+            jai_code_token.kind = .JAI_CODE;
+            jai_code_token.string_value = jai_code;
+            // Todo fixup source location
+            array_add(*result, jai_code_token);
+
+            // Todo fixup line numbers
+            tokenizer.cursor += jai_code.count;
+        }
+    }
+
+    return result;
+}
+
+get_next_token :: (using tokenizer: *Tokenizer) -> Token {
 
     current :: () -> u8 #expand {
         if cursor >= source.count  return EOT;
         return source[cursor];
     }
 
-    last_line_start: int = -1;
-    start: int;
-    line: int;
+    start := cursor;
+    result: Token;
 
     Emit :: (kind: Token_Kind) -> *Token #expand {
-        token := array_add(*result);
+        token := *result;
         token.kind = kind;
 
         token.line = line;
         token.start_char = start - last_line_start - 1;
         token.end_char = cursor - last_line_start;
-
-        if token.kind == .ERROR {
-            `return result;
-        }
 
         return token;
     }
@@ -933,263 +1076,259 @@ tokenize :: (source: string) -> [] Token {
         return false;
     }
 
-    while true {
-        while current() == #char " " || current() == #char "\r" || current() == #char "\n" {
-            if current() == #char "\n"  {
-                last_line_start = cursor;
-                line += 1;
-            }
-            cursor += 1;
+    while current() == #char " " || current() == #char "\r" || current() == #char "\n" {
+        if current() == #char "\n"  {
+            last_line_start = cursor;
+            line += 1;
+        }
+        cursor += 1;
+    }
+
+    if current() == {
+      case #char ","; Emit(.COMMA);
+      case #char "."; Emit(.DOT);
+      case #char "+"; Emit(.OPERATOR_ADD);
+      case #char ";"; Emit(.SEMICOLON);
+      case #char "*"; Emit(.OPERATOR_MULTIPLY);
+      case #char "("; Emit(.OPEN_PAREN);
+      case #char ")"; Emit(.CLOSED_PAREN);
+      case #char "["; Emit(.OPEN_BRACKET);
+      case #char "]"; Emit(.CLOSED_BRACKET);
+      case #char "{"; Emit(.OPEN_BRACE);
+      case #char "}"; Emit(.CLOSED_BRACE);
+      case #char "%"; Emit(.OPERATOR_MODULO);
+      case #char "^"; Emit(.OPERATOR_BIT_XOR);
+      case #char "~"; Emit(.TILDE);
+
+      case #char "|";
+        cursor += 1;
+        if current() == #char "|"  Emit(.OPERATOR_LOGICAL_OR);
+        else {
+            cursor -= 1;
+            Emit(.OPERATOR_BIT_OR);
         }
 
-        start = cursor;
-        if current() == {
-          case #char ","; Emit(.COMMA);
-          case #char "."; Emit(.DOT);
-          case #char "+"; Emit(.OPERATOR_ADD);
-          case #char ";"; Emit(.SEMICOLON);
-          case #char "*"; Emit(.OPERATOR_MULTIPLY);
-          case #char "("; Emit(.OPEN_PAREN);
-          case #char ")"; Emit(.CLOSED_PAREN);
-          case #char "["; Emit(.OPEN_BRACKET);
-          case #char "]"; Emit(.CLOSED_BRACKET);
-          case #char "{"; Emit(.OPEN_BRACE);
-          case #char "}"; Emit(.CLOSED_BRACE);
-          case #char "%"; Emit(.OPERATOR_MODULO);
-          case #char "^"; Emit(.OPERATOR_BIT_XOR);
-          case #char "~"; Emit(.TILDE);
+      case #char "!";
+        cursor += 1;
+        if current() == #char "="  Emit(.OPERATOR_NOT_EQUAL);
+        else {
+            cursor -= 1;
+            Emit(.EXCLAMATION_MARK);
+        }
 
-          case #char "|";
-            cursor += 1;
-            if current() == #char "|"  Emit(.OPERATOR_LOGICAL_OR);
-            else {
-                cursor -= 1;
-                Emit(.OPERATOR_BIT_OR);
+      case #char "&";
+        cursor += 1;
+        if current() == #char "&"  Emit(.OPERATOR_LOGICAL_AND);
+        else {
+            cursor -= 1;
+            Emit(.OPERATOR_BIT_AND);
+        }
+
+      case #char ":";
+        cursor += 1;
+        if current() == #char ":"  Emit(.DOUBLE_COLON);
+        else {
+            cursor -= 1;
+            Emit(.COLON);
+        }
+
+      case #char "-";
+        cursor += 1;
+        if current() == #char ">"  Emit(.ARROW);
+        else {
+            cursor -= 1;
+            Emit(.OPERATOR_SUBTRACT);
+        }
+
+      case #char "=";
+        cursor += 1;
+        if current() == #char "="  Emit(.OPERATOR_EQUALS);
+        else {
+            cursor -= 1;
+            Emit(.EQUALS);
+        }
+
+      case #char ">";
+        cursor += 1;
+        if current() == #char "="  Emit(.OPERATOR_GREATER_OR_EQUAL);
+        else {
+            cursor -= 1;
+            Emit(.OPERATOR_GREATER_THAN);
+        }
+
+      case #char "<";
+        cursor += 1;
+        if      current() == #char "="  Emit(.OPERATOR_LESS_OR_EQUAL);
+        else if current() == #char "<"  Emit(.OPERATOR_SHIFT_LEFT);
+        else {
+            cursor -= 1;
+            Emit(.OPERATOR_LESS_THAN);
+        }
+
+      case #char "/";
+        cursor += 1;
+        if current() == #char "/" {
+            while current() != #char "\n" && current() != EOT cursor += 1;
+        } else if current() == #char "*" {
+            while true {
+                if current() == EOT Emit(.ERROR);
+                if current() == #char "/" && source[cursor-1] == #char "*" break;
+                if current() == #char "\n" line += 1;
+                cursor += 1;
             }
+        } else {
+            cursor -= 1;
+            Emit(.OPERATOR_DIVIDE);
+        }
 
-          case #char "!";
-            cursor += 1;
-            if current() == #char "="  Emit(.OPERATOR_NOT_EQUAL);
-            else {
-                cursor -= 1;
-                Emit(.EXCLAMATION_MARK);
-            }
+      case 0; #through;
+      case EOT;
+        Emit(.EOT);
 
-          case #char "&";
-            cursor += 1;
-            if current() == #char "&"  Emit(.OPERATOR_LOGICAL_AND);
-            else {
-                cursor -= 1;
-                Emit(.OPERATOR_BIT_AND);
-            }
+      case;
+        if is_num(current()) || current() == #char "'" {
 
-          case #char ":";
-            cursor += 1;
-            if current() == #char ":"  Emit(.DOUBLE_COLON);
-            else {
-                cursor -= 1;
-                Emit(.COLON);
-            }
+            width := -1;
+            base := 10;
 
-          case #char "-";
-            cursor += 1;
-            if current() == #char ">"  Emit(.ARROW);
-            else {
-                cursor -= 1;
-                Emit(.OPERATOR_SUBTRACT);
-            }
+            start: int;
+            end: int;
 
-          case #char "=";
-            cursor += 1;
-            if current() == #char "="  Emit(.OPERATOR_EQUALS);
-            else {
-                cursor -= 1;
-                Emit(.EQUALS);
-            }
-
-          case #char ">";
-            cursor += 1;
-            if current() == #char "="  Emit(.OPERATOR_GREATER_OR_EQUAL);
-            else {
-                cursor -= 1;
-                Emit(.OPERATOR_GREATER_THAN);
-            }
-
-          case #char "<";
-            cursor += 1;
-            if      current() == #char "="  Emit(.OPERATOR_LESS_OR_EQUAL);
-            else if current() == #char "<"  Emit(.OPERATOR_SHIFT_LEFT);
-            else {
-                cursor -= 1;
-                Emit(.OPERATOR_LESS_THAN);
-            }
-
-          case #char "/";
-            cursor += 1;
-            if current() == #char "/" {
-                while current() != #char "\n" && current() != EOT cursor += 1;
-            } else if current() == #char "*" {
-                while true {
-                    if current() == EOT Emit(.ERROR);
-                    if current() == #char "/" && source[cursor-1] == #char "*" break;
-                    if current() == #char "\n" line += 1;
+            if is_num(current()) {
+                start = cursor;
+                while is_num(current()) {
                     cursor += 1;
                 }
-            } else {
-                cursor -= 1;
-                Emit(.OPERATOR_DIVIDE);
+                end = cursor;
             }
 
-          case 0; #through;
-          case EOT;
-            Emit(.EOT);
-            return result;
+            if current() == #char "'" {
 
-          case;
-            if is_num(current()) || current() == #char "'" {
+                if end {
+                    width_str: string;
+                    width_str.data = source.data + start;
+                    width_str.count = end - start;
 
-                width := -1;
-                base := 10;
+                    success: bool;
+                    width, success = string_to_int(width_str);
 
-                start: int;
-                end: int;
+                    assert(success);
 
-                if is_num(current()) {
+                }
+
+                cursor += 1;
+                if current() == {
+                  case #char "d";
+                  case #char "h"; base = 16;
+                  case #char "b"; base = 2;
+                }
+
+                cursor += 1;
+                
+                if is_num(current()) || is_char(current()) {
                     start = cursor;
-                    while is_num(current()) {
+                    while is_num(current()) || is_char(current()) {
                         cursor += 1;
                     }
                     end = cursor;
                 }
-
-                if current() == #char "'" {
-
-                    if end {
-                        width_str: string;
-                        width_str.data = source.data + start;
-                        width_str.count = end - start;
-
-                        success: bool;
-                        width, success = string_to_int(width_str);
-
-                        assert(success);
-
-                    }
-
-                    cursor += 1;
-                    if current() == {
-                        case #char "d";
-                        case #char "h"; base = 16;
-                        case #char "b"; base = 2;
-                    }
-
-                    cursor += 1;
-                    
-                    if is_num(current()) || is_char(current()) {
-                        start = cursor;
-                        while is_num(current()) || is_char(current()) {
-                            cursor += 1;
-                        }
-                        end = cursor;
-                    }
-                }
-
-                cursor -= 1;
-
-                value_str: string;
-                value_str.data = source.data + start;
-                value_str.count = end - start;
-                value, success := string_to_int(value_str, base = base);
-
-                assert(success, tprint("%", value_str.count));
-
-                lit := Emit(.INTEGER);
-                lit.int_value = value;
-                lit.bit_width = width;
             }
 
-            else if is_char(current()) {
-                ident: string;
-                ident.data = source.data + cursor;
-                while is_char(current()) || is_num(current()) {
-                    ident.count += 1;
-                    cursor += 1;
-                }
-                cursor -= 1;
+            cursor -= 1;
 
-                keyword := lookup_keyword(ident);
+            value_str: string;
+            value_str.data = source.data + start;
+            value_str.count = end - start;
+            value, success := string_to_int(value_str, base = base);
 
-                if keyword != .INVALID Emit(keyword);
-                else {
-                    id := Emit(.IDENTIFIER);
-                    id.string_value = ident;
-                }
+            assert(success, tprint("%", value_str.count));
+
+            lit := Emit(.INTEGER);
+            lit.int_value = value;
+            lit.bit_width = width;
+        }
+
+        else if is_char(current()) {
+            ident: string;
+            ident.data = source.data + cursor;
+            while is_char(current()) || is_num(current()) {
+                ident.count += 1;
+                cursor += 1;
             }
+            cursor -= 1;
 
+            keyword := lookup_keyword(ident);
+
+            if keyword != .INVALID Emit(keyword);
             else {
-                Emit(.ERROR);
+                id := Emit(.IDENTIFIER);
+                id.string_value = ident;
             }
         }
 
-        cursor += 1;
+        else {
+            Emit(.ERROR);
+        }
     }
 
+    cursor += 1;
     return result;
 }
 
 stringify_token :: (token: Token_Kind) -> string {
     if token == {
-        case .COLON;                 return "Colon (:)";
-        case .DOT;                   return "Dot (.)";
-        case .OPERATOR_SUBTRACT;     return "Minus (-)";
-        case .OPERATOR_ADD;          return "Plus (+)";
-        case .OPERATOR_MULTIPLY;     return "Asterisk (*)";
-        case .OPERATOR_DIVIDE;       return "Slash (/)";
-        case .COMMA;                 return "Comma (,)";
-        case .OPERATOR_BIT_OR;       return "Vertical Bar (|)";
-        case .SEMICOLON;             return "Semicolon (;)";
-        case .EQUALS;                return "Equals (=)";
-        case .EXCLAMATION_MARK;      return "Exclamation Mark (!)";
-        case .OPERATOR_LESS_THAN;    return "Less Than (<)";
-        case .OPERATOR_GREATER_THAN; return "Greater Than (>)";
-        case .OPEN_PAREN;            return "Open Parenthesis (()";
-        case .CLOSED_PAREN;          return "Closed Parenthesis ())";
-        case .OPEN_BRACKET;          return "Open Bracket ([)";
-        case .CLOSED_BRACKET;        return "Closed Bracket (])";
-        case .OPEN_BRACE;            return "Open Brace ({)";
-        case .CLOSED_BRACE;          return "Closed Brace (})";
-        case .DOUBLE_COLON;          return "Double Colon (::)";
-        case .OPERATOR_EQUALS;       return "Double Equals (==)";
-        case .OPERATOR_LOGICAL_OR;   return "Logical Or (||)";
-        case .ARROW;                 return "Arrow (->)";
-        case .IDENTIFIER;            return "Identifier";
-        case .INTEGER;               return "Integer";
-        case .KEYWORD_chip;          return "Keyword 'chip'";
-        case .KEYWORD_function;      return "Keyword 'function'";
-        case .KEYWORD_struct;        return "Keyword 'struct'";
-        case .KEYWORD_enum;          return "Keyword 'enum'";
-        case .KEYWORD_combinational; return "Keyword 'combinational'";
-        case .KEYWORD_sequential;    return "Keyword 'sequential'";
-        case .KEYWORD_external;      return "Keyword 'external'";
-        case .KEYWORD_using;         return "Keyword 'using'";
-        case .KEYWORD_for;           return "Keyword 'for'";
-        case .KEYWORD_if;            return "Keyword 'if'";
-        case .KEYWORD_else;          return "Keyword 'else'";
-        case .KEYWORD_in;            return "Keyword 'in'";
-        case .KEYWORD_out;           return "Keyword 'out'";
-        case .ERROR;                 return "(Unrecognised token)";
-        case .EOT;                   return "End Of Text";
+      case .COLON;                 return "Colon (:)";
+      case .DOT;                   return "Dot (.)";
+      case .OPERATOR_SUBTRACT;     return "Minus (-)";
+      case .OPERATOR_ADD;          return "Plus (+)";
+      case .OPERATOR_MULTIPLY;     return "Asterisk (*)";
+      case .OPERATOR_DIVIDE;       return "Slash (/)";
+      case .COMMA;                 return "Comma (,)";
+      case .OPERATOR_BIT_OR;       return "Vertical Bar (|)";
+      case .SEMICOLON;             return "Semicolon (;)";
+      case .EQUALS;                return "Equals (=)";
+      case .EXCLAMATION_MARK;      return "Exclamation Mark (!)";
+      case .OPERATOR_LESS_THAN;    return "Less Than (<)";
+      case .OPERATOR_GREATER_THAN; return "Greater Than (>)";
+      case .OPEN_PAREN;            return "Open Parenthesis (()";
+      case .CLOSED_PAREN;          return "Closed Parenthesis ())";
+      case .OPEN_BRACKET;          return "Open Bracket ([)";
+      case .CLOSED_BRACKET;        return "Closed Bracket (])";
+      case .OPEN_BRACE;            return "Open Brace ({)";
+      case .CLOSED_BRACE;          return "Closed Brace (})";
+      case .DOUBLE_COLON;          return "Double Colon (::)";
+      case .OPERATOR_EQUALS;       return "Double Equals (==)";
+      case .OPERATOR_LOGICAL_OR;   return "Logical Or (||)";
+      case .ARROW;                 return "Arrow (->)";
+      case .IDENTIFIER;            return "Identifier";
+      case .INTEGER;               return "Integer";
+      case .KEYWORD_chip;          return "Keyword 'chip'";
+      case .KEYWORD_function;      return "Keyword 'function'";
+      case .KEYWORD_struct;        return "Keyword 'struct'";
+      case .KEYWORD_enum;          return "Keyword 'enum'";
+      case .KEYWORD_combinational; return "Keyword 'combinational'";
+      case .KEYWORD_sequential;    return "Keyword 'sequential'";
+      case .KEYWORD_external;      return "Keyword 'external'";
+      case .KEYWORD_using;         return "Keyword 'using'";
+      case .KEYWORD_for;           return "Keyword 'for'";
+      case .KEYWORD_if;            return "Keyword 'if'";
+      case .KEYWORD_else;          return "Keyword 'else'";
+      case .KEYWORD_in;            return "Keyword 'in'";
+      case .KEYWORD_out;           return "Keyword 'out'";
+      case .KEYWORD_generate;      return "Keyword 'generate'";
+      case .ERROR;                 return "(Unrecognised token)";
+      case .EOT;                   return "End Of Text";
 
-        case;
-            assert(false, tprint("Tried to stringify token %\n", token));
-            return "";
+      case;
+        assert(false, tprint("Tried to stringify token %\n", token));
+        return "";
     }
 }
 
 lookup_keyword :: (ident: string) -> Token_Kind {
     ti := type_info(Token_Kind);
 
-    for Token_Kind._BEGIN_KEYWORDS+1 .. Token_Kind._END_KEYWORDS-2 {
+    for Token_Kind._BEGIN_KEYWORDS+1 .. Token_Kind._END_KEYWORDS-1 {
         name := ti.names[it];
         name.data += "KEYWORD_".count;
         name.count -= "KEYWORD_".count;

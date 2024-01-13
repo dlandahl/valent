@@ -25,4 +25,4 @@ rtlil_add_case             :: (parent: *Rtlil_Switch, comparison: *Rtlil_Signal)
 rtlil_add_action           :: (parent: *Rtlil_Case, lhs: *Rtlil_Signal, rhs: *Rtlil_Signal) #foreign yosys;
 rtlil_add_root_action      :: (process: *Rtlil_Process, lhs: *Rtlil_Signal, rhs: *Rtlil_Signal) #foreign yosys;
 rtlil_add_sync_action      :: (process: *Rtlil_Process, lhs: *Rtlil_Signal, rhs: *Rtlil_Signal) #foreign yosys;
-rtlil_concatenate_signals   :: (signals: **Rtlil_Signal, count: s32) -> *Rtlil_Signal #foreign yosys;
+rtlil_concatenate_signals  :: (signals: **Rtlil_Signal, count: s32) -> *Rtlil_Signal #foreign yosys;

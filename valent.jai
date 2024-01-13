@@ -16,31 +16,27 @@
 #run main();
 
 main :: () {
-    start_ts := current_time_monotonic();
 
-    tokens := tokenize(TEST);
-
-    ast: *Ast_Node;
-    ast = parse(tokens);
+    tokens := tokenize(TEST_PROGRAM);
+    ast := cast(*Ast_Node) parse(tokens);
 
     if !context.parser.error {
         ast = typecheck(xx ast, top = "blink");
-
-        print("Frontend time: %us\n", to_microseconds(current_time_monotonic() - start_ts));
-        start_ts = current_time_monotonic();
-
         v := generate(xx ast);
-
-        print("Backend time: %us\n", to_microseconds(current_time_monotonic() - start_ts));
         print(v);
     }
 }
 
-TEST :: #string END
+TEST_PROGRAM :: #string END
 
-blink :: chip (input: wire, clock: wire, enable: wire) -> result: flipflop {
+blink :: chip (input: wire[2], clock: wire, enable: wire) -> result: flipflop {
     sequential (clock) if enable {
         { result, result, 1'b0 } <= { input - 5, 1'b1 };
+
+        generate {
+            print("Hello, World!\n");
+            print("Something else\n");
+        }
     }
 }
 
