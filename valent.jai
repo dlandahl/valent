@@ -6,6 +6,7 @@
 
 // #import "Yosys";
 
+#load "runtime_shared.jai";
 #load "typecheck.jai";
 #load "parse.jai";
 #load "verilog_backend.jai";
@@ -16,28 +17,44 @@
 #run main();
 
 main :: () {
-
+    set_build_options_dc(.{do_output = false});
     tokens := tokenize(TEST_PROGRAM);
     ast := cast(*Ast_Node) parse(tokens);
 
     if !context.parser.error {
-        ast = typecheck(xx ast, top = "blink");
+        ast = typecheck(xx ast, top = "inverter");
         v := generate(xx ast);
-        print(v);
+        print("%\n", v);
     }
 }
 
 TEST_PROGRAM :: #string END
 
-blink :: chip (input: wire[2], clock: wire, enable: wire) -> result: flipflop {
-    sequential (clock) if enable {
-        { result, result, 1'b0 } <= { input - 5, 1'b1 };
+inverter :: chip (in: wire) -> (out: wire) generate {
+    ass := New(Ast_Assignment);
 
-        generate {
-            print("Hello, World!\n");
-            print("Something else\n");
-        }
-    }
+    comb := New(Ast_Combinational_Circuit);
+    comb.block = New(Ast_Block);
+    comb.block.* = .{
+        block_type = .COMBINATIONAL,
+        parent = valent_get_parent_block(),
+        statements = NewArray(1, *Ast_Node),    
+    };
+    comb.block.statements[0] = ass;
+
+    lhs := New(Ast_Identifier);
+    lhs.name = "out";
+
+    rhs := New(Ast_Unary_Op);
+    rhs.operation = .LOGIC_NOT;
+    rhs.argument = New(Ast_Identifier);
+    (cast(*Ast_Identifier) rhs.argument).name = "in";
+
+    ass.target = lhs;
+    ass.expr = rhs;
+    ass.type = .COMBINATIONAL;
+
+    valent_emit_ast(comb);
 }
 
 END;

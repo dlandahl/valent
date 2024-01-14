@@ -22,181 +22,6 @@ Make_Ast :: ($T: Type) -> *T {
     return node;
 }
 
-Ast_Node :: struct {
-
-    Kind :: enum {
-        NONE;
-        DECLARATION;
-        IDENTIFIER;
-        BINARY_OP;
-        UNARY_OP;
-        LITERAL;
-        CHIP;
-        SEQUENTIAL_CIRCUIT;
-        COMBINATIONAL_CIRCUIT;
-        ASSIGNMENT;
-        IF;
-        BLOCK;
-        BIT_SELECT;
-        CONCAT;
-        JAI_CODE;
-    }
-
-    kind: Kind;
-    location: Source_Location;
-
-    datatype: Datatype;
-    typechecked: bool;
-}
-
-Ast_Declaration :: struct {
-    using #as node: Ast_Node;
-    node.kind = .DECLARATION;
-
-    name: string;
-    type_expression: *Ast_Node;
-    initialisation_value: *Ast_Node;
-
-    constant: bool;
-}
-
-Ast_Concat :: struct {
-    using #as node: Ast_Node;
-    node.kind = .CONCAT;
-
-    fields: [] *Ast_Node;
-}
-
-Ast_Jai_Code :: struct {
-    using #as node: Ast_Node;
-    node.kind = .JAI_CODE;
-
-    block_type: enum {
-        GENERATE;
-        TESTBENCH;
-    }
-
-    code: string;
-}
-
-Ast_Block :: struct {
-    using #as node: Ast_Node;
-    node.kind = .BLOCK;
-
-    statements: [] *Ast_Node;
-    parent: *Ast_Block;
-    block_type: Block_Type;
-}
-
-Ast_Identifier :: struct {
-    using #as node: Ast_Node;
-    node.kind = .IDENTIFIER;
-
-    name: string;
-    resolved_declaration: *Ast_Declaration;
-}
-
-Ast_Literal :: struct {
-    using #as node: Ast_Node;
-    node.kind = .LITERAL;
-
-    int_value: int;
-    bit_width: int;
-}
-
-Ast_Assignment :: struct {
-    using #as node: Ast_Node;
-    node.kind = .ASSIGNMENT;
-
-    target: *Ast_Node; // Concat or ident
-    expr: *Ast_Node;
-
-    type: enum {
-        SEQUENTIAL;
-        COMBINATIONAL;
-    }
-}
-
-Ast_If :: struct {
-    using #as node: Ast_Node;
-    node.kind = .IF;
-
-    condition: *Ast_Node;
-    block: *Ast_Block;
-    else_block: *Ast_Block;
-}
-
-Ast_Binary_Op :: struct {
-    using #as node: Ast_Node;
-    node.kind = .BINARY_OP;
-
-    left: *Ast_Node;
-    right: *Ast_Node;
-
-    operation: Token_Kind;
-}
-
-Ast_Unary_Op :: struct {
-    using #as node: Ast_Node;
-    node.kind = .UNARY_OP;
-
-    argument: *Ast_Node;
-
-    operation: enum {
-        LOGIC_NOT;
-        BIT_NOT;
-    }
-}
-
-Ast_Chip :: struct {
-    using #as body: Ast_Block;
-    node.kind = .CHIP;
-
-    constant_parameters: [] *Ast_Declaration;
-    inputs: [] *Ast_Declaration;
-    outputs: [] *Ast_Declaration;
-}
-
-Ast_Sequential_Circuit :: struct {
-    using #as node: Ast_Node;
-    node.kind = .SEQUENTIAL_CIRCUIT;
-
-    clock: *Ast_Identifier;
-    block: *Ast_Block;
-}
-
-Ast_Combinational_Circuit :: struct {
-    using #as node: Ast_Node;
-    node.kind = .COMBINATIONAL_CIRCUIT;
-
-    block: *Ast_Block;
-}
-
-Ast_Bit_Select :: struct {
-    using #as node: Ast_Node;
-    node.kind = .BIT_SELECT;
-
-    left: *Ast_Node;
-    right: *Ast_Node;
-
-    select_type: enum {
-        RANGE;
-        POSITIVE_FIXED_WIDTH;
-        NEGATIVE_FIXED_WIDTH;
-    };
-}
-
-
-
-Block_Type :: enum {
-    NONE;
-    TOP_LEVEL;
-    CHIP;
-    SEQUENTIAL;
-    COMBINATIONAL;
-    _COUNT;
-}
-
 push_block :: (block: *Ast_Block) {
     assert(block && block.block_type != .NONE);
 
@@ -347,7 +172,7 @@ parse :: (tokens: [] Token) -> *Ast_Block {
 
         if s.kind == .JAI_CODE {
             jai := cast(*Ast_Jai_Code) s;
-            execute_jai_code(jai);
+            generate_and_insert_ast(jai, *statements, top_level);
         } else {
             check_statement_allowed_in_block(s);
             array_add(*statements, s);
@@ -394,7 +219,7 @@ parse_statement :: () -> *Ast_Node {
         if peek(.COLON, .DOUBLE_COLON, distance = 2) {
             decl := parse_declaration();
 
-            if current_token().kind != .CLOSED_BRACE {
+            if current_token().kind != .CLOSED_BRACE && current_token().kind != .SEMICOLON {
                 expect(.SEMICOLON);
             }
 
@@ -506,7 +331,7 @@ parse_block :: (block_type: Block_Type) -> *Ast_Block {
 
         if s.kind == .JAI_CODE {
             jai := cast(*Ast_Jai_Code) s;
-            execute_jai_code(jai);
+            generate_and_insert_ast(jai, *statements, block);
         } else {
             check_statement_allowed_in_block(s);
             if context.parser.error break;
@@ -523,7 +348,9 @@ parse_block :: (block_type: Block_Type) -> *Ast_Block {
     return block;
 }
 
-execute_jai_code :: (jai: *Ast_Jai_Code) {
+#no_reset RUNTIME_DECLARATIONS :: #run read_entire_file("runtime_shared.jai");
+
+generate_and_insert_ast :: (jai: *Ast_Jai_Code, statements: *[..] *Ast_Node, parent: *Ast_Block) {
     if !#compile_time return; // Todo
 
     #import "Compiler";
@@ -533,10 +360,18 @@ execute_jai_code :: (jai: *Ast_Jai_Code) {
 
     options := get_build_options(ws);
     options.output_type = .NO_OUTPUT;
+
+    user_data := New(Generate_Block_User_Data);
+    user_data.parent_block = parent;
+    options.user_data_pointer = *user_data;
+    options.user_data_pointer_size = size_of(**Generate_Block_User_Data);
+
     set_build_options(options, ws);
 
     compiler_begin_intercept(ws);
-    add_build_string(tprint(JAI_CODE_FORMAT, jai.code), ws);
+
+    the_program := tprint(JAI_CODE_FORMAT, RUNTIME_DECLARATIONS, jai.code);
+    add_build_string(the_program, ws);
 
     while true {
         m := compiler_wait_for_message();
@@ -548,6 +383,10 @@ execute_jai_code :: (jai: *Ast_Jai_Code) {
         }
     }
 
+    for 0..user_data.num_emitted-1 {
+        array_add(statements, user_data.syntax_trees[it]);
+    }
+
     compiler_end_intercept(ws);
 }
 
@@ -555,9 +394,26 @@ JAI_CODE_FORMAT :: #string END
 #import "Basic";
 #import "Compiler";
 
+%1 // The Ast_* and Datatype struct definitions
+
+user_data: *Generate_Block_User_Data;
+
+valent_emit_ast :: (ast: *Ast_Node) {
+    user_data.syntax_trees[user_data.num_emitted] = ast;
+    user_data.num_emitted += 1;
+}
+
+valent_get_parent_block :: () -> *Ast_Block {
+    return user_data.parent_block;
+}
+
 #run {
-    set_build_options_dc(.{do_output=false});
-    %
+    {
+        options := get_build_options();
+        user_data = << cast(**Generate_Block_User_Data) options.user_data_pointer;
+    }
+
+    %2 // The user program
 }
 END;
 
@@ -878,79 +734,6 @@ current_token :: () -> Token {
     return tokens[token_index - 1]; // The last token that was allowed or expected
 }
 
-
-
-Token_Kind :: enum {
-    INVALID;
-
-    _BEGIN_OPERATORS;
-    OPERATOR_ADD;
-    OPERATOR_SUBTRACT;
-    OPERATOR_MULTIPLY;
-    OPERATOR_DIVIDE;
-    OPERATOR_MODULO;
-    OPERATOR_BIT_OR;
-    OPERATOR_BIT_AND;
-    OPERATOR_BIT_XOR;
-    OPERATOR_LESS_THAN;
-    OPERATOR_GREATER_OR_EQUAL;
-    OPERATOR_LESS_OR_EQUAL;
-    OPERATOR_GREATER_THAN;
-    OPERATOR_EQUALS;
-    OPERATOR_NOT_EQUAL;
-    OPERATOR_LOGICAL_OR;
-    OPERATOR_LOGICAL_AND;
-    OPERATOR_SHIFT_LEFT;
-    OPERATOR_SHIFT_RIGHT;
-    _END_OPERATORS;
-
-    COLON;
-    COMMA;
-    SEMICOLON;
-    DOT;
-    EQUALS;
-    EXCLAMATION_MARK;
-    TILDE;
-    OPEN_PAREN;
-    CLOSED_PAREN;
-    OPEN_BRACKET;
-    CLOSED_BRACKET;
-    OPEN_BRACE;
-    CLOSED_BRACE;
-
-    ARROW;
-    DOUBLE_COLON;
-
-    IDENTIFIER;
-    INTEGER;
-
-    _BEGIN_KEYWORDS;
-    KEYWORD_chip;
-    KEYWORD_function;
-    KEYWORD_struct;
-    KEYWORD_enum;
-    KEYWORD_combinational;
-    KEYWORD_sequential;
-    KEYWORD_external;
-    // KEYWORD_constant;
-    // KEYWORD_wire;
-    // KEYWORD_latch;
-    // KEYWORD_flipflop;
-    KEYWORD_using;
-    KEYWORD_for;
-    KEYWORD_if;
-    KEYWORD_else;
-    KEYWORD_in;
-    KEYWORD_out;
-    KEYWORD_generate;
-    _END_KEYWORDS;
-
-    JAI_CODE;
-
-    ERROR;
-    EOT;
-}
-
 Token :: struct {
     kind: Token_Kind;
 
@@ -960,12 +743,6 @@ Token :: struct {
     string_value: string;
 
     using location: Source_Location;
-}
-
-Source_Location :: struct {
-    line: int;
-    start_char: int;
-    end_char: int;
 }
 
 EOT : u8 : 0x4;
@@ -1313,8 +1090,6 @@ stringify_token :: (token: Token_Kind) -> string {
       case .KEYWORD_for;           return "Keyword 'for'";
       case .KEYWORD_if;            return "Keyword 'if'";
       case .KEYWORD_else;          return "Keyword 'else'";
-      case .KEYWORD_in;            return "Keyword 'in'";
-      case .KEYWORD_out;           return "Keyword 'out'";
       case .KEYWORD_generate;      return "Keyword 'generate'";
       case .ERROR;                 return "(Unrecognised token)";
       case .EOT;                   return "End Of Text";

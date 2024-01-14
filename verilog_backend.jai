@@ -32,7 +32,7 @@ generate_chip :: (decl: *Ast_Declaration) {
     }
 
     for chip.outputs {
-        write_verilog("    output % %\n", ifx it.datatype.primitive == .FLIPFLOP then "reg" else "", it.name);
+        write_verilog("    output %1%2\n", ifx it.datatype.primitive == .FLIPFLOP then "reg" else "", it.name);
         if it_index != chip.outputs.count-1 write_verilog(",");
     }
 

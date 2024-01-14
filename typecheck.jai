@@ -1,31 +1,6 @@
 
 #import "Hash_Table";
 
-Datatype :: struct {
-
-    // Kind :: enum {
-    //     INVALID;
-    //     PRIMITIVE;
-    //     STRUCT;
-    //     ENUM;
-    //     ARRAY;
-    // }
-
-    Primitive :: enum {
-        INVALID;
-        CONSTANT;
-        WIRE;
-        LATCH;
-        FLIPFLOP;
-        CHIP;
-        CHIP_INSTANTIATION;
-        _COUNT;
-    }
-
-    primitive: Primitive;
-    bit_width: int; // -1 means constant with no specific width
-}
-
 typecheck :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
 
     for top_level.statements {
