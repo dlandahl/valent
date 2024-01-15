@@ -170,10 +170,10 @@ parse :: (tokens: [] Token) -> *Ast_Block {
 
         s := parse_statement();
 
-        if s.kind == .JAI_CODE {
+        if s && s.kind == .JAI_CODE {
             jai := cast(*Ast_Jai_Code) s;
             generate_and_insert_ast(jai, *statements, top_level);
-        } else {
+        } else if s {
             check_statement_allowed_in_block(s);
             array_add(*statements, s);
         }
@@ -262,7 +262,7 @@ parse_statement :: () -> *Ast_Node {
     }
 
     if allow(.KEYWORD_generate) {
-        expect(.OPEN_BRACE);
+        braced := allow(.OPEN_BRACE);
 
         jai := Make_Ast(Ast_Jai_Code);
         expect(.JAI_CODE);
@@ -270,7 +270,9 @@ parse_statement :: () -> *Ast_Node {
         jai.block_type = .GENERATE;
         jai.code = current_token().string_value;
 
-        expect(.CLOSED_BRACE);
+        if braced expect(.CLOSED_BRACE);
+        else expect(.SEMICOLON);
+
         return jai;
     }
 
@@ -413,7 +415,7 @@ valent_get_parent_block :: () -> *Ast_Block {
         user_data = << cast(**Generate_Block_User_Data) options.user_data_pointer;
     }
 
-    %2 // The user program
+    %2; // The user program
 }
 END;
 
@@ -756,27 +758,28 @@ Tokenizer :: struct {
 }
 
 tokenize :: (source: string) -> [] Token {
-    result: [..] Token;
+    output_token_stream: [..] Token;
 
     tokenizer: Tokenizer;
     tokenizer.source = source;
 
     context.parser.source_code_lines = split(source, "\n");
 
-    array_reserve(*result, source.count / 4);
+    array_reserve(*output_token_stream, source.count / 4);
 
     while true {
         token := get_next_token(*tokenizer);
-        array_add(*result, token);
+        array_add(*output_token_stream, token);
 
         if token.kind == .ERROR break;
         if token.kind == .EOT   break;
 
         if token.kind == .KEYWORD_generate {
 
-            token = get_next_token(*tokenizer);
-            if token.kind != .OPEN_BRACE assert(false);
-            array_add(*result, token);
+            starts_with_brace := peek_token(*tokenizer).kind == .OPEN_BRACE;
+            if starts_with_brace {
+                array_add(*output_token_stream, get_next_token(*tokenizer));
+            }
 
             Jai :: #import "Jai_Lexer";
 
@@ -796,6 +799,10 @@ tokenize :: (source: string) -> [] Token {
                     case #char "}"; brace_level -= 1;
                     case .END_OF_INPUT; assert(false);
                     case .ERROR; assert(false);
+                    case #char ";"; if !starts_with_brace && brace_level == 0 {
+                        Jai.eat_token(*lexer);
+                        break;
+                    }
                 }
 
                 if brace_level < 0 break;
@@ -810,14 +817,21 @@ tokenize :: (source: string) -> [] Token {
             jai_code_token.kind = .JAI_CODE;
             jai_code_token.string_value = jai_code;
             // Todo fixup source location
-            array_add(*result, jai_code_token);
+            array_add(*output_token_stream, jai_code_token);
 
             // Todo fixup line numbers
             tokenizer.cursor += jai_code.count;
         }
     }
 
-    return result;
+    return output_token_stream;
+}
+
+peek_token :: (tokenizer: *Tokenizer) -> Token {
+    old_state := tokenizer.*;
+    peeked := get_next_token(tokenizer);
+    tokenizer.* = old_state;
+    return peeked;
 }
 
 get_next_token :: (using tokenizer: *Tokenizer) -> Token {
@@ -1091,6 +1105,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .KEYWORD_if;            return "Keyword 'if'";
       case .KEYWORD_else;          return "Keyword 'else'";
       case .KEYWORD_generate;      return "Keyword 'generate'";
+      case .JAI_CODE;              return "Jai Code";
       case .ERROR;                 return "(Unrecognised token)";
       case .EOT;                   return "End Of Text";
 

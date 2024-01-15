@@ -30,31 +30,21 @@ main :: () {
 
 TEST_PROGRAM :: #string END
 
-inverter :: chip (in: wire) -> (out: wire) generate {
-    ass := New(Ast_Assignment);
+inverter :: module (clock: wire) -> q: flipflop[8] {
+    ram: [1024] memory [8];
+    counter: flipflop[10];
 
-    comb := New(Ast_Combinational_Circuit);
-    comb.block = New(Ast_Block);
-    comb.block.* = .{
-        block_type = .COMBINATIONAL,
-        parent = valent_get_parent_block(),
-        statements = NewArray(1, *Ast_Node),    
-    };
-    comb.block.statements[0] = ass;
+    procedural
+        init_memory_from_file(ram, "my_binary_file.bin");
 
-    lhs := New(Ast_Identifier);
-    lhs.name = "out";
+    sequential (clock) {
+        {0, counter} <= counter + 1;
+        q <= memory[counter];
+    }
+}
 
-    rhs := New(Ast_Unary_Op);
-    rhs.operation = .LOGIC_NOT;
-    rhs.argument = New(Ast_Identifier);
-    (cast(*Ast_Identifier) rhs.argument).name = "in";
+testbench {
 
-    ass.target = lhs;
-    ass.expr = rhs;
-    ass.type = .COMBINATIONAL;
-
-    valent_emit_ast(comb);
 }
 
 END;

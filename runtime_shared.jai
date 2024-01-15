@@ -17,7 +17,7 @@ Ast_Node :: struct {
         BIT_SELECT;
         CONCAT;
         JAI_CODE;
-        STOP_MARKER; // Hack to let the runtime code tell the parent workspace where the end of the array of syntax trees to be inserted is
+        STOP_MARKER;
     }
 
     kind: Kind;
