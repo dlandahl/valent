@@ -41,9 +41,8 @@ generate :: (top: *Ast_Declaration) {
 
             for comb.block.statements if it.kind == .ASSIGNMENT {
                 ass := cast(*Ast_Assignment) it;
-                ident := cast(*Ast_Identifier) ass.target;
 
-                target := rtlil_signal_by_name(module, to_c_string(tprint("$%", ident.name)));
+                target := generate_expression(ass.target);
                 source := generate_expression(ass.expr);
 
                 rtlil_connect(context.rtlil.current_module, target, source);
@@ -85,13 +84,15 @@ generate_sequential_block :: (block: *Ast_Block, process: *Rtlil_Process, parent
             next_name := to_c_string(tprint("%_next", wire_name));
 
             next := rtlil_signal_by_name(current_module, next_name);
+            target := rtlil_signal_by_name(current_module, to_c_string(wire_name));
+
             already_exists := next != null;
 
             if !already_exists {
                 next = rtlil_add_wire(current_module, next_name, 1);
+                rtlil_add_sync_action(process, target, next);
             }
 
-            target := rtlil_signal_by_name(current_module, to_c_string(wire_name));
             source := generate_expression(ass.expr);
 
             if !parent {
@@ -102,10 +103,6 @@ generate_sequential_block :: (block: *Ast_Block, process: *Rtlil_Process, parent
                 }
 
                 rtlil_add_action(parent, next, source);
-            }
-
-            if !already_exists {
-                rtlil_add_sync_action(process, target, next);
             }
         }
 
@@ -142,20 +139,37 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
         width := ifx lit.bit_width == -1 then 32 else lit.bit_width;
         return rtlil_constant(xx lit.int_value, xx width);
 
+      case .BIT_SELECT; return null; // Handled by BINARY_OP
       case .BINARY_OP;
         op := cast(*Ast_Binary_Op) expr;
         left := generate_expression(op.left);
-        right := generate_expression(op.right);
 
-        info := get_operator_info(op.operation);
-        cell_type := to_c_string(info.rtlil_cell_type);
+        if op.operation == .OPEN_BRACKET {
+            start, end: s32;
 
-        width := max(op.left.datatype.bit_width, op.right.datatype.bit_width);
-        if op.operation == .OPERATOR_ADD      width += 1;
-        if op.operation == .OPERATOR_MULTIPLY width *= 2;
+            if op.right.kind == .BIT_SELECT {
+                bits := cast(*Ast_Bit_Select) op.right;
+                start = xx evaluate_constant_expression(bits.left);
+                end = xx evaluate_constant_expression(bits.right);
+            } else {
+                start = xx evaluate_constant_expression(op.right);
+                end = -1;
+            }
 
-        result := rtlil_add_binary_cell(current_module, cell_type, left, right, width, op.location.line);
-        return result;
+            return rtlil_bit_select(left, cast(s32) start, cast(s32) end);
+        } else {
+            right := generate_expression(op.right);
+
+            info := get_operator_info(op.operation);
+            cell_type := to_c_string(info.rtlil_cell_type);
+
+            width := max(op.left.datatype.bit_width, op.right.datatype.bit_width);
+            if op.operation == .OPERATOR_ADD      width += 1;
+            if op.operation == .OPERATOR_MULTIPLY width *= 2;
+
+            result := rtlil_add_binary_cell(current_module, cell_type, left, right, width, op.location.line);
+            return result;
+        }
 
       case .UNARY_OP;
         op := cast(*Ast_Unary_Op) expr;

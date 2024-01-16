@@ -36,6 +36,7 @@ Ast_Declaration :: struct {
     initialisation_value: *Ast_Node;
 
     constant: bool;
+    chip_input: bool;
 }
 
 Ast_Concat :: struct {
@@ -187,6 +188,7 @@ Datatype :: struct {
 
     primitive: Primitive;
     bit_width: int; // -1 means constant with no specific width
+    chip_input: bool;
 }
 
 Block_Type :: enum {

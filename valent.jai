@@ -4,20 +4,19 @@
 #import "File";
 #import "File_Utilities";
 
-// #import "Yosys";
+#import "Yosys";
 
 #load "runtime_shared.jai";
 #load "typecheck.jai";
 #load "parse.jai";
-#load "verilog_backend.jai";
-// #load "rtlil_backend.jai";
-
-// #assert OS == .WINDOWS;
+// #load "verilog_backend.jai";
+#load "rtlil_backend.jai";
 
 #run main();
 
 main :: () {
     set_build_options_dc(.{do_output = false});
+
     tokens := tokenize(TEST_PROGRAM);
     ast := cast(*Ast_Node) parse(tokens);
 
@@ -30,21 +29,10 @@ main :: () {
 
 TEST_PROGRAM :: #string END
 
-inverter :: module (clock: wire) -> q: flipflop[8] {
-    ram: [1024] memory [8];
-    counter: flipflop[10];
-
-    procedural
-        init_memory_from_file(ram, "my_binary_file.bin");
-
-    sequential (clock) {
-        {0, counter} <= counter + 1;
-        q <= memory[counter];
+inverter :: chip (a: wire, b: wire) -> (q: wire, r: wire) {
+    combinational {
+        {r, 1'b1, q} = {b, 2'b01};
     }
-}
-
-testbench {
-
 }
 
 END;

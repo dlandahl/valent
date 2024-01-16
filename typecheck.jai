@@ -126,6 +126,10 @@ typecheck :: (block: *Ast_Block) {
                 semantic_error(ass, "combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
             }
 
+            if lhs_type.chip_input {
+                semantic_error(ass, "a chip input parameter must not be the target of an assignment\n\n%", node_location_string(ass.target));
+            }
+
             check_bit_width(ass, lhs_type, ass.expr.datatype);
 
           case .IF;
@@ -230,6 +234,8 @@ typecheck_expression :: (expr: *Ast_Node) {
 
             any_flipflops ||= it.datatype.primitive == .FLIPFLOP;
             any_wires     ||= it.datatype.primitive == .WIRE;
+
+            cat.datatype.chip_input ||= it.datatype.chip_input;
         }
 
         cat.datatype.bit_width = bit_width;
@@ -266,6 +272,7 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
         typecheck_expression(decl.initialisation_value);
         decl.datatype = decl.initialisation_value.datatype;
     }
+    decl.datatype.chip_input = decl.chip_input;
 
     prim := decl.datatype.primitive;
     if prim == .CONSTANT || prim == .CHIP {

@@ -121,33 +121,6 @@ extern "C" {
         return (RTLIL_Signal *)result;
     }
 
-    __declspec(dllexport) void rtlil_switch_test(RTLIL_Module *module, RTLIL_Process *process, RTLIL_Signal *condition, RTLIL_Signal* counter) {
-        RTLIL::Module *_module = (RTLIL::Module *)module;
-        RTLIL::Process *_process = (RTLIL::Process *)process;
-
-        RTLIL::SwitchRule *sw = new RTLIL::SwitchRule;
-        sw->signal = *(RTLIL::SigSpec *)condition;
-        _process->root_case.switches.push_back(sw);
-
-        auto counter_next = rtlil_add_wire(module, "$counter_next", 5, 0, false, false);
-
-        auto increment = rtlil_add_binary_cell(_module, "$add", counter, rtlil_constant(1, 5), 5, 0);
-        auto decrement = rtlil_add_binary_cell(_module, "$sub", counter, rtlil_constant(1, 5), 5, 0);
-
-        RTLIL::CaseRule *c1 = new RTLIL::CaseRule;
-        c1->compare.push_back(RTLIL::Const(0, 1));
-        c1->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)counter_next, *(RTLIL::SigSpec *)increment));
-
-        RTLIL::CaseRule *c2 = new RTLIL::CaseRule;
-        c2->compare.push_back(RTLIL::Const(1, 1));
-        c2->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)counter_next, *(RTLIL::SigSpec *)decrement));
-
-        sw->cases.push_back(c1);
-        sw->cases.push_back(c2);
-
-        _process->syncs.at(0)->actions.push_back(RTLIL::SigSig(*(RTLIL::SigSpec *)counter, *(RTLIL::SigSpec *)counter_next));
-    }
-
     __declspec(dllexport) RTLIL_Switch *rtlil_add_switch(RTLIL_Process *process, RTLIL_Case *optional_parent, RTLIL_Signal *condition) {
         RTLIL::Process *_process = (RTLIL::Process *)process;
 
@@ -192,11 +165,24 @@ extern "C" {
     __declspec(dllexport) RTLIL_Signal *rtlil_concatenate_signals(RTLIL_Signal **signals, int count) {
         RTLIL::SigSpec *result = new RTLIL::SigSpec;
 
-        for (int i = 0; i < count; i++) {
-            RTLIL::SigSpec *it = (RTLIL::SigSpec *)signals[i];
+        for (int i = count-1; i >= 0; i--) {
+            const RTLIL::SigSpec it = *(RTLIL::SigSpec *)signals[i];
             result->append(it);
         }
 
         return (RTLIL_Signal *)result;
+    }
+
+    __declspec(dllexport) RTLIL_Signal *rtlil_bit_select(RTLIL_Signal *source, int start, int end) {
+        RTLIL::SigSpec *_source = (RTLIL::SigSpec *)source;
+        RTLIL::SigSpec *result = new RTLIL::SigSpec;
+
+        if (end == -1) {
+            *result = RTLIL::SigSpec(_source->at(start, RTLIL::SigBit(false)), 1);
+        } else {
+            *result = RTLIL::SigSpec(_source->extract(start, end - start)); // Todo does not support reverse
+        }
+
+        return result;
     }
 }

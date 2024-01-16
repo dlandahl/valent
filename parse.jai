@@ -147,7 +147,7 @@ Binary_Operator_Info :: struct {
 get_operator_info :: (token: Token_Kind) -> *Binary_Operator_Info {
     for *operator_info if it.token == token return it;
 
-    assert(false);
+    assert(false, tprint("Tried to get operator info for '%'\n", token));
     return null;
 }
 
@@ -606,32 +606,18 @@ parse_combinational_statement :: () -> *Ast_Combinational_Circuit {
 }
 
 parse_parameter_list :: () -> [] *Ast_Declaration, [] *Ast_Declaration, [] *Ast_Declaration {
-    started_with_paren := allow(.OPEN_PAREN);
-
     constants: [..] *Ast_Declaration;
     inputs: [..] *Ast_Declaration;
     outputs: [..] *Ast_Declaration;
 
+    started_with_paren := allow(.OPEN_PAREN);
+
     while peek(.IDENTIFIER) {
         decl := parse_declaration();
+        decl.chip_input = true;
         array_add(*inputs, decl);
 
         if !allow(.COMMA) break;
-    }
-
-    if allow(.OPERATOR_BIT_OR) {
-        constants = inputs;
-
-        inputs.data = null;
-        inputs.allocated = 0;
-        inputs.count = 0;
-
-        while peek(.IDENTIFIER) {
-            decl := parse_declaration();
-            array_add(*inputs, decl);
-
-            if !allow(.COMMA) break;
-        }
     }
 
     if started_with_paren {
@@ -644,7 +630,7 @@ parse_parameter_list :: () -> [] *Ast_Declaration, [] *Ast_Declaration, [] *Ast_
         decl := parse_declaration();
         array_add(*outputs, decl);
 
-        while peek(.IDENTIFIER) {
+        if allow(.COMMA) while peek(.IDENTIFIER) {
             decl := parse_declaration();
             array_add(*outputs, decl);
 
@@ -1032,7 +1018,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
             value_str.count = end - start;
             value, success := string_to_int(value_str, base = base);
 
-            assert(success, tprint("%", value_str.count));
+            assert(success, tprint("string_to_int failed with string '%'", value_str));
 
             lit := Emit(.INTEGER);
             lit.int_value = value;
