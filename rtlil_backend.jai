@@ -59,7 +59,7 @@ generate :: (top: *Ast_Declaration) {
     rtlil_done();
 
     yosys_run_pass("dump");
-    // yosys_run_pass("proc; opt; write_verilog");
+    yosys_run_pass("proc; opt; write_verilog");
 }
 
 generate_process :: (seq: *Ast_Sequential_Circuit) {
@@ -89,7 +89,7 @@ generate_sequential_block :: (block: *Ast_Block, process: *Rtlil_Process, parent
             already_exists := next != null;
 
             if !already_exists {
-                next = rtlil_add_wire(current_module, next_name, 1);
+                next = rtlil_add_wire(current_module, next_name, xx ass.target.datatype.bit_width);
                 rtlil_add_sync_action(process, target, next);
             }
 
