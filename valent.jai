@@ -31,14 +31,16 @@ main :: () {
 TEST_PROGRAM :: #string END
 
 Test_Enum :: enum {
-    a::5; b::6; c::7*7; d;
+    A; B; C; D;
 }
 
-switch_test :: chip (clock: wire, condition: wire[Test_Enum]) -> state: flipflop[2] {
-    sequential (clock) switch condition {
-        case (Test_Enum.a) { state <= 4; }
-        case (Test_Enum.b) { state <= 3; }
-        case (Test_Enum.c) { state <= 2; }
+k :: 10;
+
+switch_test :: chip (clock: wire, condition: wire[Test_Enum]) -> state: wire[2] {
+    combinational switch condition {
+         case Test_Enum.A state = 4;
+         case Test_Enum.B state = 10;
+         case Test_Enum.C state = 2;
     }
 }
 

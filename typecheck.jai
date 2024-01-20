@@ -98,8 +98,10 @@ typecheck_block :: (block: *Ast_Block) {
             ass := cast(*Ast_Assignment) it;
 
             if block.block_type == {
-                case .SEQUENTIAL;    assert(ass.type == .SEQUENTIAL);
-                case .COMBINATIONAL; assert(ass.type == .COMBINATIONAL);
+                case .SEQUENTIAL; if ass.type == .COMBINATIONAL
+                    semantic_error(ass, "Assignments in sequential blocks must be sequential assignments (<=)\n\n%", node_location_string(ass));
+                case .COMBINATIONAL; if ass.type == .SEQUENTIAL
+                    semantic_error(ass, "Assignments in combinational blocks must be combinational assignments (=)\n\n%", node_location_string(ass));
                 case; assert(false);
             }
 
@@ -396,20 +398,6 @@ evaluate_type_expression :: (expr: *Ast_Node) {
 
             ident := cast(*Ast_Identifier) op.right;
             root.datatype.enum_def = ident.datatype.enum_def;
-
-            print("Stack trace:\n");
-
-            node := context.stack_trace;
-            while node {
-                if node.info != null {
-                    filename := path_filename(node.info.location.fully_pathed_filename);
-                    print("   | %:% in ", filename, node.line_number);
-                    print("%", node.info.name);
-                    print("()\n");
-                }
-                node = node.next;
-            }
-            print("\n");
 
             assert(expr.datatype.enum_def != null);
         } else {
