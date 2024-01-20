@@ -26,6 +26,7 @@ typecheck :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
 
 typecheck_chip :: (chip: *Ast_Chip) {
     assert(chip.constant_parameters.count == 0, "To do");
+    context.typechecker.current_block = chip;
 
     for chip.inputs {
         evaluate_type_expression(it.type_expression);
@@ -46,7 +47,7 @@ typecheck_chip :: (chip: *Ast_Chip) {
         }
     }
 
-    typecheck(cast(*Ast_Block) chip);
+    typecheck_block(cast(*Ast_Block) chip);
 }
 
 Typechecker :: struct {
@@ -55,7 +56,7 @@ Typechecker :: struct {
 
 #add_context typechecker: Typechecker;
 
-typecheck :: (block: *Ast_Block) {
+typecheck_block :: (block: *Ast_Block) {
     names: Table(string, *Ast_Declaration);
 
     Duplication_Check :: (decl: *Ast_Declaration) #expand {
@@ -140,20 +141,36 @@ typecheck :: (block: *Ast_Block) {
           case .IF;
             _if := cast(*Ast_If) it;
             typecheck_expression(_if.condition);
-            typecheck(_if.block);
+            typecheck_block(_if.block);
 
             if _if.else_block {
-                typecheck(_if.else_block);
+                typecheck_block(_if.else_block);
+            }
+
+          case .SWITCH;
+            switch := cast(*Ast_Switch) it;
+            typecheck_expression(switch.condition);
+
+            for switch.cases {
+                typecheck_expression(it.compare);
+
+                if switch.condition.datatype.enum_def {
+                    if switch.condition.datatype.enum_def != it.compare.datatype.enum_def {
+                        semantic_error(it.compare, "This switch statement is over an enum value, so all cases should be values of that enum\n\n%", node_location_string(it.compare));
+                    }
+                }
+
+                typecheck_block(it.block);
             }
 
           case .SEQUENTIAL_CIRCUIT;
             seq := cast(*Ast_Sequential_Circuit) it;
             resolve_identifier(seq.clock);
-            typecheck(seq.block);
+            typecheck_block(seq.block);
 
           case .COMBINATIONAL_CIRCUIT;
             comb := cast(*Ast_Combinational_Circuit) it;
-            typecheck(comb.block);
+            typecheck_block(comb.block);
 
           case .JAI_CODE; // Todo
           case;
@@ -337,11 +354,11 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         root.datatype.enum_def = New(Enum_Def);
 
         _enum := cast(*Ast_Enum) expr;
-        _enum.datatype.bit_width = evaluate_constant_expression(_enum.width);
 
-        last_value: int;
+        last_value := -1;
+        largest: int;
+
         for _enum.fields {
-
             new := array_add(*_enum.datatype.enum_def.fields);
             new.name = it.name;
 
@@ -351,7 +368,14 @@ evaluate_type_expression :: (expr: *Ast_Node) {
                 new.value = last_value + 1;
             }
 
+            if new.value > largest largest = new.value;
             last_value = new.value;
+        }
+
+        if _enum.width {
+            root.datatype.bit_width = evaluate_constant_expression(_enum.width);
+        } else {
+            root.datatype.bit_width = bit_scan_reverse(largest);
         }
 
         return;
@@ -367,14 +391,29 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         typecheck_expression(op.right);
 
         if op.right.datatype.primitive == .ENUM {
-            expr.datatype.bit_width = op.right.datatype.bit_width;
+            root.datatype.bit_width = op.right.datatype.bit_width;
             assert(op.right.kind == .IDENTIFIER); // Todo error
+
             ident := cast(*Ast_Identifier) op.right;
-            resolve_identifier(ident);
-            expr.datatype.enum_def = ident.datatype.enum_def;
+            root.datatype.enum_def = ident.datatype.enum_def;
+
+            print("Stack trace:\n");
+
+            node := context.stack_trace;
+            while node {
+                if node.info != null {
+                    filename := path_filename(node.info.location.fully_pathed_filename);
+                    print("   | %:% in ", filename, node.line_number);
+                    print("%", node.info.name);
+                    print("()\n");
+                }
+                node = node.next;
+            }
+            print("\n");
+
             assert(expr.datatype.enum_def != null);
         } else {
-            expr.datatype.bit_width = evaluate_constant_expression(op.right);
+            root.datatype.bit_width = evaluate_constant_expression(op.right);
         }
 
         expr = op.left;

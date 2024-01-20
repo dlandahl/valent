@@ -14,6 +14,7 @@ Ast_Node :: struct {
         COMBINATIONAL_CIRCUIT;
         ASSIGNMENT;
         IF;
+        SWITCH;
         BLOCK;
         BIT_SELECT;
         CONCAT;
@@ -94,6 +95,18 @@ Ast_Assignment :: struct {
         SEQUENTIAL;
         COMBINATIONAL;
     }
+}
+
+Ast_Switch :: struct {
+    using #as node: Ast_Node;
+    node.kind = .SWITCH;
+
+    condition: *Ast_Node;
+
+    cases: [..] struct {
+        compare: *Ast_Node;
+        block: *Ast_Block;
+    };
 }
 
 Ast_If :: struct {
@@ -285,6 +298,8 @@ Token_Kind :: enum {
     KEYWORD_if;
     KEYWORD_else;
     KEYWORD_generate;
+    KEYWORD_switch;
+    KEYWORD_case;
     _END_KEYWORDS;
 
     JAI_CODE;

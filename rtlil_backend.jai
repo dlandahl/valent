@@ -59,7 +59,7 @@ generate :: (top: *Ast_Declaration) {
     rtlil_done();
 
     yosys_run_pass("dump");
-    yosys_run_pass("proc; opt; write_verilog");
+    // yosys_run_pass("proc; opt; write_verilog");
 }
 
 generate_process :: (seq: *Ast_Sequential_Circuit) {
@@ -127,6 +127,19 @@ generate_sequential_block :: (block: *Ast_Block, process: *Rtlil_Process, parent
                 generate_sequential_block(_if.else_block, process, parent);
             }
         }
+
+        if it.kind == .SWITCH {
+            switch := cast(*Ast_Switch) it;
+
+            condition := generate_expression(switch.condition);
+            sw := rtlil_add_switch(process, parent, condition);
+
+            for switch.cases {
+                match := generate_expression(it.compare);
+                c := rtlil_add_case(sw, match);
+                generate_sequential_block(it.block, process, c);
+            }
+        }
     }
 }
 
@@ -159,7 +172,7 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
             return rtlil_bit_select(left, cast(s32) start, cast(s32) end);
         } else if op.operation == .OPERATOR_DOT {
             value := evaluate_constant_expression(op); // Todo this should be folded by this point
-            return rtlil_constant(value, 32);
+            return rtlil_constant(xx value, 32);
         } else {
             right := generate_expression(op.right);
 

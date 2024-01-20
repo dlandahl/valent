@@ -59,6 +59,7 @@ check_statement_allowed_in_block :: (ast: *Ast_Node) {
           case .CHIP;
           case .SEQUENTIAL;
             if ast.kind == .IF return true, "";
+            if ast.kind == .SWITCH return true, "";
             if ast.kind == .ASSIGNMENT {
                 ass := cast(*Ast_Assignment) ast;
                 if ass.type != .SEQUENTIAL {
@@ -102,6 +103,9 @@ stringify_statement :: (ast: *Ast_Node) -> string {
 
       case .IF;
         return "If";
+
+      case .SWITCH;
+        return "Switch";
 
       case .ASSIGNMENT;
         ass := cast(*Ast_Assignment) ast;
@@ -250,6 +254,23 @@ parse_statement :: () -> *Ast_Node {
         }
 
         return _if;
+    }
+
+    if allow(.KEYWORD_switch) {
+        switch := Make_Ast(Ast_Switch);
+        switch.condition = parse_expression();
+
+        parent := peek(context.parser.block_stack);
+        expect(.OPEN_BRACE);
+
+        while allow(.KEYWORD_case) {
+            new := array_add(*switch.cases);
+            new.compare = parse_expression();
+            new.block = parse_block(parent.block_type);
+        }
+
+        expect(.CLOSED_BRACE);
+        return switch;
     }
 
     if peek(.KEYWORD_sequential) {
@@ -516,6 +537,7 @@ parse_atom :: () -> *Ast_Node {
     else if peek(.OPEN_BRACE) {
         atom = parse_concat();
     }
+
     else if allow(.OPEN_PAREN) {
         atom = parse_expression();
         expect(.CLOSED_PAREN);
@@ -557,6 +579,7 @@ parse_enum :: () -> *Ast_Enum {
         _enum.width = parse_expression();
         expect(.CLOSED_BRACKET);
     }
+
     expect(.OPEN_BRACE);
 
     fields: [..] Ast_Enum.Field;
@@ -1125,6 +1148,8 @@ stringify_token :: (token: Token_Kind) -> string {
       case .KEYWORD_if;            return "Keyword 'if'";
       case .KEYWORD_else;          return "Keyword 'else'";
       case .KEYWORD_generate;      return "Keyword 'generate'";
+      case .KEYWORD_switch;        return "Keyword 'switch'";
+      case .KEYWORD_case;          return "Keyword 'case'";
       case .JAI_CODE;              return "Jai Code";
       case .ERROR;                 return "(Unrecognised token)";
       case .EOT;                   return "End Of Text";

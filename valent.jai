@@ -3,14 +3,15 @@
 #import "String";
 #import "File";
 #import "File_Utilities";
+#import "Bit_Operations";
 
 #import "Yosys";
 
 #load "runtime_shared.jai";
 #load "typecheck.jai";
 #load "parse.jai";
-#load "verilog_backend.jai";
-// #load "rtlil_backend.jai";
+// #load "verilog_backend.jai";
+#load "rtlil_backend.jai";
 
 #run main();
 
@@ -21,13 +22,29 @@ main :: () {
     ast := cast(*Ast_Node) parse(tokens);
 
     if !context.parser.error {
-        ast = typecheck(xx ast, top = "inverter");
+        ast = typecheck(xx ast, top = "switch_test");
         v := generate(xx ast);
         print("%\n", v);
     }
 }
 
 TEST_PROGRAM :: #string END
+
+Test_Enum :: enum {
+    a::5; b::6; c::7*7; d;
+}
+
+switch_test :: chip (clock: wire, condition: wire[Test_Enum]) -> state: flipflop[2] {
+    sequential (clock) switch condition {
+        case (Test_Enum.a) { state <= 4; }
+        case (Test_Enum.b) { state <= 3; }
+        case (Test_Enum.c) { state <= 2; }
+    }
+}
+
+END;
+
+/*
 
 inverter :: chip (clock: wire) -> f: wire {
 
@@ -46,19 +63,15 @@ inverter :: chip (clock: wire) -> f: wire {
     sequential (clock) {
         {1'b0, counter} <= counter + 1;
 
-        if counter == 0 {
+        if (counter == 0) {
             test <= !test;
         }
 
-        ff <= Test_Enum.e;
+        ff <= Test_Enum.a;
     }
 
     combinational f = test;
 }
-
-END;
-
-/*
 
 yosys_test :: () {
     rtlil_initialise_design();

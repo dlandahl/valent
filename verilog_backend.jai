@@ -28,11 +28,21 @@ generate_chip :: (decl: *Ast_Declaration) {
     chip := cast(*Ast_Chip) decl.initialisation_value;
 
     for chip.inputs {
-        write_verilog("    input %,\n", it.name);
+        write_verilog("    input %", it.name);
+
+        if it.datatype.bit_width > 1 {
+            write_verilog("[%]", it.datatype.bit_width);
+        }
+        write_verilog(",\n");
     }
 
     for chip.outputs {
-        write_verilog("    output %1%2", ifx it.datatype.primitive == .FLIPFLOP then "reg" else "", it.name);
+        write_verilog("    output %1%2", ifx it.datatype.primitive == .FLIPFLOP then "reg " else "", it.name);
+
+        if it.datatype.bit_width > 1 {
+            write_verilog("[%]", it.datatype.bit_width);
+        }
+
         if it_index != chip.outputs.count-1 write_verilog(",");
         write_verilog("\n");
     }
@@ -129,6 +139,30 @@ generate_statement :: (stmt: *Ast_Node) {
         }
 
         write_verilog("end\n");
+
+      case .SWITCH;
+        switch := cast(*Ast_Switch) stmt;
+
+        write_verilog("case (");
+        generate_expression(switch.condition);
+        write_verilog(")\n");
+
+        context.code_generator.verilog.indentation_level += 1;
+        for switch.cases {
+            value := evaluate_constant_expression(it.compare);
+            write_verilog("%: begin\n", value);
+
+            context.code_generator.verilog.indentation_level += 1;
+            for it.block.statements {
+                generate_statement(it);
+            }
+            context.code_generator.verilog.indentation_level -= 1;
+
+            write_verilog("end\n");
+        }
+        context.code_generator.verilog.indentation_level -= 1;
+
+        write_verilog("endcase");
     }
 }
 
