@@ -3,7 +3,11 @@ reduce :: combinational <mask: constant> (value: wire[8]) -> result: wire {
     result = ~(^(value & mask));
 }
 
-Lfsr_Updown :: chip (clk: wire, reset: wire, enable: wire, up_down: wire) -> (count: flipflop[8], overflow: wire) {
+Thing :: enum {
+
+}
+
+Lfsr_Updown :: chip <thing: Thing> (clk: wire, reset: wire, enable: wire, up_down: wire) -> (count: flipflop[8], overflow: wire) {
 
     combinational
         if up_down  overflow = count == 8'b0000_0001;
@@ -12,20 +16,25 @@ Lfsr_Updown :: chip (clk: wire, reset: wire, enable: wire, up_down: wire) -> (co
     sequential (clk) if reset {
         count <= 8'b0;
     } else if enable {
-        if up_down {
-            count <= { reduce('b0110_0011, count), count[7:1] };
-        } else {
-            count <= { count[6:0], reduce('b1011_0001, count) };
-        }
+
+        if up_down count <= {
+            reduce<'b0110_0011>(count), count[7:1]
+        };
+
+        else count <= {
+            count[6:0], reduce<'b1011_0001>(count)
+        };
     }
 }
 
 testbench {
     using lfsr := instantiate(Lfsr_Updown);
 
-    register_sim_callback(#code {
+    context.simulation.callback_data = *lfsr;
+    context.simulation.callback = (data: *void) {
+        lfsr := cast(*Lfsr_Updown) data;
         lfsr.in.clk = !lfsr.in.clk;
-    });
+    }
 
     in.clk = 0;
     in.reset = 1;
@@ -45,4 +54,15 @@ testbench {
 
     log("State: %", lfsr);
     testbench_assert(out.count == 0x1233);
+}
+
+high_level_synthesized_module :: pipeline (clk: wire, param: wire[5]) -> result: flipflop[5] {
+    a := param + 4;
+    b := test(a);
+
+    test :: (c: int) -> d {
+        return c + c;
+    }
+
+    return b;
 }

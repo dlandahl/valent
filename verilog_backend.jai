@@ -57,6 +57,7 @@ generate_statement :: (stmt: *Ast_Node) {
 
         if      t.primitive == .FLIPFLOP write_verilog("reg ");
         else if t.primitive == .WIRE     write_verilog("wire ");
+        else if t.primitive == .ENUM     return;
 
         if t.bit_width > 1 {
             write_verilog("[%] ", t.bit_width);
@@ -156,6 +157,9 @@ generate_expression :: (expr: *Ast_Node) {
             write_verilog("[");
             generate_expression(op.right);
             write_verilog("]");
+        } else if op.operation == .OPERATOR_DOT {
+            value := evaluate_constant_expression(op); // Todo this should be folded by this point
+            write_verilog("%", value);
         } else {
             info := get_operator_info(op.operation);
 

@@ -117,6 +117,7 @@ stringify_statement :: (ast: *Ast_Node) -> string {
 }
 
 operator_info :: Binary_Operator_Info.[
+    .{ .OPERATOR_DOT,              "",   "",           12 },
     .{ .OPERATOR_ADD,              "+",  "$add",       10 },
     .{ .OPERATOR_SUBTRACT,         "-",  "$sub",       10 },
     .{ .OPERATOR_MULTIPLY,         "*","  $mul",       11 },
@@ -508,10 +509,13 @@ parse_atom :: () -> *Ast_Node {
         atom = parse_chip();
     }
 
+    else if peek(.KEYWORD_enum) {
+        atom = parse_enum();
+    }
+
     else if peek(.OPEN_BRACE) {
         atom = parse_concat();
     }
-
     else if allow(.OPEN_PAREN) {
         atom = parse_expression();
         expect(.CLOSED_PAREN);
@@ -543,6 +547,35 @@ parse_atom :: () -> *Ast_Node {
     }
 
     return atom;
+}
+
+parse_enum :: () -> *Ast_Enum {
+    expect(.KEYWORD_enum);
+    _enum := Make_Ast(Ast_Enum);
+
+    if allow(.OPEN_BRACKET) {
+        _enum.width = parse_expression();
+        expect(.CLOSED_BRACKET);
+    }
+    expect(.OPEN_BRACE);
+
+    fields: [..] Ast_Enum.Field;
+
+    while peek(.IDENTIFIER) {
+        new := array_add(*fields);
+        new.name = expect(.IDENTIFIER).string_value;
+
+        if allow(.DOUBLE_COLON) {
+            new.value_expr = parse_expression();
+        }
+
+        expect(.SEMICOLON);
+    }
+
+    expect(.CLOSED_BRACE);
+
+    _enum.fields = fields;
+    return _enum;
 }
 
 parse_concat :: () -> *Ast_Concat {
@@ -863,7 +896,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
 
     if current() == {
       case #char ","; Emit(.COMMA);
-      case #char "."; Emit(.DOT);
+      case #char "."; Emit(.OPERATOR_DOT);
       case #char "+"; Emit(.OPERATOR_ADD);
       case #char ";"; Emit(.SEMICOLON);
       case #char "*"; Emit(.OPERATOR_MULTIPLY);
@@ -946,6 +979,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
         cursor += 1;
         if current() == #char "/" {
             while current() != #char "\n" && current() != EOT cursor += 1;
+            return get_next_token(tokenizer);
         } else if current() == #char "*" {
             while true {
                 if current() == EOT Emit(.ERROR);
@@ -953,6 +987,8 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
                 if current() == #char "\n" line += 1;
                 cursor += 1;
             }
+
+            return get_next_token(tokenizer);
         } else {
             cursor -= 1;
             Emit(.OPERATOR_DIVIDE);
@@ -1055,7 +1091,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
 stringify_token :: (token: Token_Kind) -> string {
     if token == {
       case .COLON;                 return "Colon (:)";
-      case .DOT;                   return "Dot (.)";
+      case .OPERATOR_DOT;          return "Dot (.)";
       case .OPERATOR_SUBTRACT;     return "Minus (-)";
       case .OPERATOR_ADD;          return "Plus (+)";
       case .OPERATOR_MULTIPLY;     return "Asterisk (*)";
@@ -1080,12 +1116,10 @@ stringify_token :: (token: Token_Kind) -> string {
       case .IDENTIFIER;            return "Identifier";
       case .INTEGER;               return "Integer";
       case .KEYWORD_chip;          return "Keyword 'chip'";
-      case .KEYWORD_function;      return "Keyword 'function'";
-      case .KEYWORD_struct;        return "Keyword 'struct'";
+      case .KEYWORD_register;      return "Keyword 'register'";
       case .KEYWORD_enum;          return "Keyword 'enum'";
       case .KEYWORD_combinational; return "Keyword 'combinational'";
       case .KEYWORD_sequential;    return "Keyword 'sequential'";
-      case .KEYWORD_external;      return "Keyword 'external'";
       case .KEYWORD_using;         return "Keyword 'using'";
       case .KEYWORD_for;           return "Keyword 'for'";
       case .KEYWORD_if;            return "Keyword 'if'";
@@ -1094,6 +1128,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .JAI_CODE;              return "Jai Code";
       case .ERROR;                 return "(Unrecognised token)";
       case .EOT;                   return "End Of Text";
+      case .INVALID;               return "(Unrecognised token)";
 
       case;
         assert(false, tprint("Tried to stringify token %\n", token));

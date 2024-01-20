@@ -9,8 +9,8 @@
 #load "runtime_shared.jai";
 #load "typecheck.jai";
 #load "parse.jai";
-// #load "verilog_backend.jai";
-#load "rtlil_backend.jai";
+#load "verilog_backend.jai";
+// #load "rtlil_backend.jai";
 
 #run main();
 
@@ -29,10 +29,31 @@ main :: () {
 
 TEST_PROGRAM :: #string END
 
-inverter :: chip (a: wire, b: wire) -> (q: wire, r: wire) {
-    combinational {
-        {r, 1'b1, q} = {b, 2'b01};
+inverter :: chip (clock: wire) -> f: wire {
+
+    Test_Enum :: enum[5+5] {
+        a :: 10;
+        b; // 10'd11
+        c; // 10'd12
+        d :: 5;
     }
+
+    ff: flipflop[Test_Enum];
+
+    test: flipflop;
+    counter: flipflop[10];
+
+    sequential (clock) {
+        {1'b0, counter} <= counter + 1;
+
+        if counter == 0 {
+            test <= !test;
+        }
+
+        ff <= Test_Enum.e;
+    }
+
+    combinational f = test;
 }
 
 END;

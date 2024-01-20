@@ -157,6 +157,9 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
             }
 
             return rtlil_bit_select(left, cast(s32) start, cast(s32) end);
+        } else if op.operation == .OPERATOR_DOT {
+            value := evaluate_constant_expression(op); // Todo this should be folded by this point
+            return rtlil_constant(value, 32);
         } else {
             right := generate_expression(op.right);
 

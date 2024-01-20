@@ -1,16 +1,53 @@
 
-blink :: chip (clk: wire, reset: wire) -> led: flipflop {
+Fixed :: register <int_bits, fract_bits> {
+    int[int_bits];
+    fract[fract_bits];
+}
 
-    counter: flipflop[18];
+add :: combinational (a: wire[Fixed], b: wire[a.int_bits]) -> result: wire[Fixed] {
+    result = {trunc b + a.int, a.fract};
+}
 
-    sequential (clk) if reset {
+Float :: register[32] {
+    sign;
+    exponent[8];
+    mantissa[23];
+}
+
+clb :: combinational (a: wire[], b: wire[], c: wire[], d: wire[]) -> q: wire[] {
+    q = (a & b) | (~c & d);
+}
+
+Adder :: chip (a: wire[8], b: wire[8]) -> c: wire[8] {
+    combinational
+        c = trunc a + b;
+
+    testbench {
+        for Adder.inputs  Basic.print("Found port %: %", it.name, it.type);
+        for Adder.outputs Basic.print("Found port %: %", it.name, it.type);
+    }
+}
+
+Square_Wave :: chip (clock: wire, reset: wire, period: wire[]) -> wave: flipflop {
+    counter: flipflop[period.width];
+
+    sequential (clock) if reset {
         counter <= 0;
-        led <= 0;
     } else {
-        counter <= counter + 1;
+        counter <=,trunc counter + 1;
 
-        if counter == 0 {
-            led <= !led;
+        if counter == period {
+            counter <= 0;
+            wave <= !wave;
         }
+    }
+
+    testbench {
+        dut := instantiate(Square_Wave);
+
+        Run_Simulation({
+            using simulation;
+            dut.clock = !dut.clock;
+        });
     }
 }

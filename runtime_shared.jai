@@ -9,6 +9,7 @@ Ast_Node :: struct {
         UNARY_OP;
         LITERAL;
         CHIP;
+        ENUM;
         SEQUENTIAL_CIRCUIT;
         COMBINATIONAL_CIRCUIT;
         ASSIGNMENT;
@@ -17,7 +18,6 @@ Ast_Node :: struct {
         BIT_SELECT;
         CONCAT;
         JAI_CODE;
-        STOP_MARKER;
     }
 
     kind: Kind;
@@ -136,6 +136,19 @@ Ast_Chip :: struct {
     outputs: [] *Ast_Declaration;
 }
 
+Ast_Enum :: struct {
+    using #as node: Ast_Node;
+    node.kind = .ENUM;
+
+    Field :: struct {
+        name: string;
+        value_expr: *Ast_Node;
+    }
+
+    width: *Ast_Node;
+    fields: [] Field;
+}
+
 Ast_Sequential_Circuit :: struct {
     using #as node: Ast_Node;
     node.kind = .SEQUENTIAL_CIRCUIT;
@@ -167,14 +180,6 @@ Ast_Bit_Select :: struct {
 
 Datatype :: struct {
 
-    // Kind :: enum {
-    //     INVALID;
-    //     PRIMITIVE;
-    //     STRUCT;
-    //     ENUM;
-    //     ARRAY;
-    // }
-
     Primitive :: enum {
         INVALID;
         CONSTANT;
@@ -182,13 +187,34 @@ Datatype :: struct {
         LATCH;
         FLIPFLOP;
         CHIP;
-        CHIP_INSTANTIATION;
+        ENUM;
+        REGISTER;
         _COUNT;
     }
 
     primitive: Primitive;
     bit_width: int; // -1 means constant with no specific width
     chip_input: bool;
+
+    union {
+        enum_def: *Enum_Def;
+        register_def: *Register_Def;
+    }
+}
+
+Enum_Def :: struct {
+    decl: *Ast_Declaration;
+
+    Field :: struct {
+        name: string;
+        value: int;
+    }
+
+    fields: [..] Field;
+}
+
+Register_Def :: struct {
+
 }
 
 Block_Type :: enum {
@@ -222,12 +248,12 @@ Token_Kind :: enum {
     OPERATOR_LOGICAL_AND;
     OPERATOR_SHIFT_LEFT;
     OPERATOR_SHIFT_RIGHT;
+    OPERATOR_DOT;
     _END_OPERATORS;
 
     COLON;
     COMMA;
     SEMICOLON;
-    DOT;
     EQUALS;
     EXCLAMATION_MARK;
     TILDE;
@@ -246,12 +272,10 @@ Token_Kind :: enum {
 
     _BEGIN_KEYWORDS;
     KEYWORD_chip;
-    KEYWORD_function;
-    KEYWORD_struct;
+    KEYWORD_register;
     KEYWORD_enum;
     KEYWORD_combinational;
     KEYWORD_sequential;
-    KEYWORD_external;
     // KEYWORD_constant;
     // KEYWORD_wire;
     // KEYWORD_latch;

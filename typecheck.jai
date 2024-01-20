@@ -107,7 +107,6 @@ typecheck :: (block: *Ast_Block) {
                 ident := cast(*Ast_Identifier) ass.target;
 
                 resolve_identifier(ident);
-                typecheck_declaration(ident.resolved_declaration);
 
                 lhs_type = ident.resolved_declaration.datatype;
             } else if ass.target.kind == .CONCAT {
@@ -128,6 +127,12 @@ typecheck :: (block: *Ast_Block) {
 
             if lhs_type.chip_input {
                 semantic_error(ass, "a chip input parameter must not be the target of an assignment\n\n%", node_location_string(ass.target));
+            }
+
+            if lhs_type.enum_def {
+                if ass.expr.datatype.enum_def != lhs_type.enum_def {
+                    semantic_error(ass, "In this assignment, the left side has an enum tag, but the right side is not a value of that enum\n\n%", node_location_string(ass.target));
+                }
             }
 
             check_bit_width(ass, lhs_type, ass.expr.datatype);
@@ -177,10 +182,6 @@ typecheck_expression :: (expr: *Ast_Node) {
             resolve_identifier(id);
         }
 
-        if !id.resolved_declaration.typechecked {
-            typecheck_declaration(id.resolved_declaration);
-        }
-
         id.datatype = id.resolved_declaration.datatype;
 
       case .UNARY_OP;
@@ -192,26 +193,60 @@ typecheck_expression :: (expr: *Ast_Node) {
       case .BINARY_OP;
         op := cast(*Ast_Binary_Op) expr;
         typecheck_expression(op.left);
-        typecheck_expression(op.right);
 
-        op.datatype = op.left.datatype;
+        if op.operation == .OPERATOR_DOT {
+            if op.left.datatype.primitive != .ENUM && op.left.datatype.primitive != .REGISTER {
+                semantic_error(op, "Dot dereference (.) used on type '%', but only works on enums or registers.\n\n%", op.left.datatype.primitive, node_location_string(op));
+            }
 
-        if op.operation != .OPEN_BRACKET {
-            op.datatype.bit_width = max(op.left.datatype.bit_width, op.right.datatype.bit_width);
+            if op.right.kind != .IDENTIFIER {
+                semantic_error(op, "Expected an identifier to the right of dot dereference (.).\n\n%", node_location_string(op));
+            }
 
-            if op.operation == .OPERATOR_ADD       op.datatype.bit_width += 1;
-            if op.operation == .OPERATOR_MULTIPLY  op.datatype.bit_width *= 2;
+            if op.left.datatype.primitive == .ENUM {
+                enum_def := op.left.datatype.enum_def;
+                op.datatype.primitive = .CONSTANT;
+                op.datatype.bit_width = op.left.datatype.bit_width;
+                op.datatype.enum_def = enum_def;
 
-        } else {
-            if op.right.kind == .BIT_SELECT {
-                sel := cast(*Ast_Bit_Select) op.right;
+                ident := cast(*Ast_Identifier) op.right;
 
-                left  := evaluate_constant_expression(sel.left);
-                right := evaluate_constant_expression(sel.right);
+                found: bool;
+                for enum_def.fields if it.name == ident.name {
+                    found = true;
+                    break;
+                }
 
-                op.datatype.bit_width = left - right + 1;
+                if !found {
+                    semantic_error(op, "Name '%' was not found in the enum\n\n%", ident.name, node_location_string(op.right));
+                }
+
+            } else if op.left.datatype.primitive == .REGISTER {
+                assert(false);
             } else {
-                op.datatype.bit_width = 1;
+                assert(false);
+            }
+        } else {
+            typecheck_expression(op.right);
+            op.datatype = op.left.datatype;
+
+            if op.operation != .OPEN_BRACKET {
+                op.datatype.bit_width = max(op.left.datatype.bit_width, op.right.datatype.bit_width);
+
+                if op.operation == .OPERATOR_ADD       op.datatype.bit_width += 1;
+                if op.operation == .OPERATOR_MULTIPLY  op.datatype.bit_width *= 2;
+
+            } else {
+                if op.right.kind == .BIT_SELECT {
+                    sel := cast(*Ast_Bit_Select) op.right;
+
+                    left  := evaluate_constant_expression(sel.left);
+                    right := evaluate_constant_expression(sel.right);
+
+                    op.datatype.bit_width = left - right + 1;
+                } else {
+                    op.datatype.bit_width = 1;
+                }
             }
         }
 
@@ -265,17 +300,24 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
 
     if decl.typechecked return;
 
+    // Hack
+    if decl.initialisation_value && decl.initialisation_value.kind == .ENUM {
+        decl.type_expression = decl.initialisation_value;
+        decl.initialisation_value = null;
+    }
+
     if decl.type_expression {
         evaluate_type_expression(decl.type_expression);
         decl.datatype = decl.type_expression.datatype;
     } else {
+        // Infer the type from the value
         typecheck_expression(decl.initialisation_value);
         decl.datatype = decl.initialisation_value.datatype;
     }
     decl.datatype.chip_input = decl.chip_input;
 
     prim := decl.datatype.primitive;
-    if prim == .CONSTANT || prim == .CHIP {
+    if prim == .CONSTANT || prim == .CHIP || prim == .ENUM {
         if !decl.constant {
             semantic_error(decl, "declarations of type % must be constant. Use 'name :: value' here instead of 'name: type'\n\n%\n\n", prim, node_location_string(decl)); // Todo: stringify type name
         }
@@ -290,7 +332,31 @@ evaluate_type_expression :: (expr: *Ast_Node) {
     defer expr.typechecked = true;
     root := expr;
 
-    if expr.kind == .BINARY_OP {
+    if expr.kind == .ENUM {
+        root.datatype.primitive = .ENUM;
+        root.datatype.enum_def = New(Enum_Def);
+
+        _enum := cast(*Ast_Enum) expr;
+        _enum.datatype.bit_width = evaluate_constant_expression(_enum.width);
+
+        last_value: int;
+        for _enum.fields {
+
+            new := array_add(*_enum.datatype.enum_def.fields);
+            new.name = it.name;
+
+            if it.value_expr != null {
+                new.value = evaluate_constant_expression(it.value_expr);
+            } else {
+                new.value = last_value + 1;
+            }
+
+            last_value = new.value;
+        }
+
+        return;
+
+    } else if expr.kind == .BINARY_OP { // Bus
         op := cast(*Ast_Binary_Op) expr;
 
         if op.operation != .OPEN_BRACKET {
@@ -298,7 +364,18 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             semantic_error(expr, "expected a type\n\n%\n\n", l);
         }
 
-        expr.datatype.bit_width = evaluate_constant_expression(op.right);
+        typecheck_expression(op.right);
+
+        if op.right.datatype.primitive == .ENUM {
+            expr.datatype.bit_width = op.right.datatype.bit_width;
+            assert(op.right.kind == .IDENTIFIER); // Todo error
+            ident := cast(*Ast_Identifier) op.right;
+            resolve_identifier(ident);
+            expr.datatype.enum_def = ident.datatype.enum_def;
+            assert(expr.datatype.enum_def != null);
+        } else {
+            expr.datatype.bit_width = evaluate_constant_expression(op.right);
+        }
 
         expr = op.left;
     } else {
@@ -330,51 +407,70 @@ types_match :: (left: Datatype, right: Datatype) -> bool {
 
 evaluate_constant_expression :: (expr: *Ast_Node) -> int {
 
-    if expr.kind == {
-      case .LITERAL;
-        lit := cast(*Ast_Literal) expr;
-        return lit.int_value;
+    internal_evaluate :: (expr: *Ast_Node) -> int {
+        if expr.kind == {
+            case .LITERAL;
+            lit := cast(*Ast_Literal) expr;
+            return lit.int_value;
 
-      case .UNARY_OP;
-        op := cast(*Ast_Unary_Op) expr;
-        arg := evaluate_constant_expression(op.argument);
+            case .UNARY_OP;
+            op := cast(*Ast_Unary_Op) expr;
+            arg := internal_evaluate(op.argument);
 
-        if op.operation == .LOGIC_NOT return cast(int) !arg;
-        if op.operation == .BIT_NOT return ~arg;
+            if op.operation == .LOGIC_NOT return cast(int) !arg;
+            if op.operation == .BIT_NOT return ~arg;
 
-      case .BINARY_OP;
-        op := cast(*Ast_Binary_Op) expr;
-        left := evaluate_constant_expression(op.left);
-        right := evaluate_constant_expression(op.right);
+            case .BINARY_OP;
+            op := cast(*Ast_Binary_Op) expr;
 
-        if op.operation == {
-            case .OPERATOR_ADD;          return left + right;
-            case .OPERATOR_SUBTRACT;     return left - right;
-            case .OPERATOR_MULTIPLY;     return left * right;
-            case .OPERATOR_DIVIDE;       return left / right;
-            case .OPERATOR_BIT_OR;       return left | right;
-            case .OPERATOR_LESS_THAN;    return cast(int) (left < right);
-            case .OPERATOR_GREATER_THAN; return cast(int) (left > right);
-            case .OPERATOR_EQUALS;       return cast(int) (left == right);
-            case .OPERATOR_LOGICAL_OR;   return cast(int) (left || right);
-            case; assert(false);
+            if op.operation == .OPERATOR_DOT {
+                assert(op.left.datatype.enum_def != null);
+                assert(op.right.kind == .IDENTIFIER);
+
+                ident := cast(*Ast_Identifier) op.right;
+
+                for op.left.datatype.enum_def.fields {
+                    if it.name == ident.name return it.value;
+                }
+
+                semantic_error(op, "Name '%' was not found in the enum\n\n%", ident.name, node_location_string(op.right));
+            }
+
+            left := internal_evaluate(op.left);
+            right := internal_evaluate(op.right);
+
+            if op.operation == {
+                case .OPERATOR_ADD;          return left + right;
+                case .OPERATOR_SUBTRACT;     return left - right;
+                case .OPERATOR_MULTIPLY;     return left * right;
+                case .OPERATOR_DIVIDE;       return left / right;
+                case .OPERATOR_BIT_OR;       return left | right;
+                case .OPERATOR_LESS_THAN;    return cast(int) (left < right);
+                case .OPERATOR_GREATER_THAN; return cast(int) (left > right);
+                case .OPERATOR_EQUALS;       return cast(int) (left == right);
+                case .OPERATOR_LOGICAL_OR;   return cast(int) (left || right);
+                case; assert(false);
+            }
+
+            case .IDENTIFIER;
+            id := cast(*Ast_Identifier) expr;
+
+            prim := id.resolved_declaration.datatype.primitive;
+            if prim == .CHIP || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
+                l1 := node_location_string(id);
+                l2 := node_location_string(id.resolved_declaration);
+                semantic_error(id, "this identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%\n\n", l1, l2);
+            }
+
+            return internal_evaluate(id.resolved_declaration.initialisation_value); // Todo cache
         }
 
-      case .IDENTIFIER;
-        id := cast(*Ast_Identifier) expr;
-
-        prim := id.resolved_declaration.datatype.primitive;
-        if prim == .CHIP || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
-            l1 := node_location_string(id);
-            l2 := node_location_string(id.resolved_declaration);
-            semantic_error(id, "this identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%\n\n", l1, l2);
-        }
-
-        return evaluate_constant_expression(id.resolved_declaration.initialisation_value); // Todo cache
+        assert(false);
+        return 0;
     }
 
-    assert(false);
-    return 0;
+    typecheck_expression(expr);
+    return internal_evaluate(expr);
 }
 
 resolve_identifier :: (id: *Ast_Identifier) {
