@@ -5,13 +5,13 @@
 #import "File_Utilities";
 #import "Bit_Operations";
 
-#import "Yosys";
+// #import "Yosys";
 
 #load "runtime_shared.jai";
 #load "typecheck.jai";
 #load "parse.jai";
-// #load "verilog_backend.jai";
-#load "rtlil_backend.jai";
+#load "verilog_backend.jai";
+// #load "rtlil_backend.jai";
 
 #run main();
 
@@ -30,18 +30,20 @@ main :: () {
 
 TEST_PROGRAM :: #string END
 
-Test_Enum :: enum {
-    A; B; C; D;
+Test_Enum :: enum [3] {
+    A; B; C; D; E; F; G;
 }
 
-k :: 10;
+switch_test :: chip (clock: wire, condition: wire[Test_Enum]) -> state: flipflop[3] {
+    test: wire[Test_Enum];
 
-switch_test :: chip (clock: wire, condition: wire[Test_Enum]) -> state: wire[2] {
-    combinational switch condition {
-         case Test_Enum.A state = 4;
-         case Test_Enum.B state = 10;
-         case Test_Enum.C state = 2;
+    sequential (clock) switch condition {
+         case Test_Enum.A state <= 4;
+         case Test_Enum.B state <= Test_Enum.A;
+         case Test_Enum.C state <= 2;
     }
+
+    combinational test = Test_Enum.G;
 }
 
 END;

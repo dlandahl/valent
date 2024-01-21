@@ -374,14 +374,18 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             last_value = new.value;
         }
 
+        bits_needed := bit_scan_reverse(largest);
+
         if _enum.width {
             root.datatype.bit_width = evaluate_constant_expression(_enum.width);
+            if root.datatype.bit_width < bits_needed {
+                semantic_error(root, "This enum requires % bits to represent its values, but has specifically been given a width of only %\n\n%\n", bits_needed, root.datatype.bit_width, node_location_string(_enum));
+            }
         } else {
-            root.datatype.bit_width = bit_scan_reverse(largest);
+            root.datatype.bit_width = -1;
         }
 
         return;
-
     } else if expr.kind == .BINARY_OP { // Bus
         op := cast(*Ast_Binary_Op) expr;
 
@@ -398,6 +402,10 @@ evaluate_type_expression :: (expr: *Ast_Node) {
 
             ident := cast(*Ast_Identifier) op.right;
             root.datatype.enum_def = ident.datatype.enum_def;
+
+            if root.datatype.bit_width == -1 {
+                semantic_error(ident, "Cannot create a circuit element based on an enum without a specific width:\n\n%\n\nUse `enum [N]` here:\n\n%\n\n", node_location_string(ident), node_location_string(ident.resolved_declaration.type_expression));
+            }
 
             assert(expr.datatype.enum_def != null);
         } else {
@@ -557,5 +565,5 @@ node_location_string :: (node: *Ast_Node) -> string {
     third.data += loc.end_char;
     third.count -= loc.end_char;
 
-    return tprint("line %:%[31m%[0m%", loc.line, first, second, third);
+    return tprint("(line %): %[31m%[0m%", loc.line, first, second, third);
 }
