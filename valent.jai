@@ -29,24 +29,29 @@ main :: () {
 
 TEST_PROGRAM :: #string END
 
-Reg :: register {
+Reg :: register [11] {
     a;
-    b[4];
+    b[2];
+    c[Letters];
+    d[Nested];
+}
+
+Nested :: register {
+    a;
+    b;
     c[Letters];
 }
 
-Nested :: register [32] {
-    reg_a[Reg];
-    reg_b[Reg];
-}
-
-Letters :: enum [11] {
+Letters :: enum[3] {
     A; B; C; D;
 }
 
-switch_test :: chip (clock: wire) -> state: flipflop[2] {
+switch_test :: chip (clock: wire) -> state: flipflop[Letters] {
+    test: flipflop[Reg];
 
-    test: flipflop[Nested];
+    sequential (clock) {
+        state <= test.d.c;
+    }
 }
 
 END;

@@ -171,8 +171,31 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
             return rtlil_bit_select(left, cast(s32) start, cast(s32) end);
 
         } else if op.operation == .OPERATOR_DOT {
-            value := evaluate_constant_expression(op); // Todo this should be folded by this point
-            return rtlil_constant(xx value, 32);
+            if op.left.datatype.primitive == .ENUM {
+                value := evaluate_constant_expression(op);
+                return rtlil_constant(xx value, 32);
+            } else if op.left.datatype.register_def {
+                reg := op.left.datatype.register_def;
+                ident := cast(*Ast_Identifier) op.right;
+
+                // Both backends do this, maybe it can be moved to typechecking
+                field_start_bit: int;
+                field: *Register_Def.Field;
+
+                for *reg.fields {
+                    if it.name == ident.name {
+                        field = it;
+                        break;
+                    }
+
+                    field_start_bit += it.width;
+                }
+
+                assert(field != null);
+                return rtlil_bit_select(left, xx field_start_bit, cast(s32) (field_start_bit + field.width));
+            } else {
+                assert(false);
+            }
 
         } else {
             right := generate_expression(op.right);

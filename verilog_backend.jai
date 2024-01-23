@@ -32,7 +32,7 @@ generate_chip :: (decl: *Ast_Declaration) {
         write_verilog("    input %", it.name);
 
         if it.datatype.bit_width > 1 {
-            write_verilog("[%]", it.datatype.bit_width);
+            write_verilog("[%:0]", it.datatype.bit_width-1);
         }
         write_verilog(",\n");
     }
@@ -41,7 +41,7 @@ generate_chip :: (decl: *Ast_Declaration) {
         write_verilog("    output %1%2", ifx it.datatype.primitive == .FLIPFLOP then "reg " else "", it.name);
 
         if it.datatype.bit_width > 1 {
-            write_verilog("[%]", it.datatype.bit_width);
+            write_verilog("[%:0]", it.datatype.bit_width-1);
         }
 
         if it_index != chip.outputs.count-1 write_verilog(",");
@@ -71,7 +71,7 @@ generate_statement :: (stmt: *Ast_Node) {
         else if t.primitive == .ENUM     return;
 
         if t.bit_width > 1 {
-            write_verilog("[%] ", t.bit_width);
+            write_verilog("[%:0] ", t.bit_width-1);
         }
 
         write_verilog(decl.name);
@@ -192,9 +192,33 @@ generate_expression :: (expr: *Ast_Node) {
             write_verilog("[");
             generate_expression(op.right);
             write_verilog("]");
+
         } else if op.operation == .OPERATOR_DOT {
-            value := evaluate_constant_expression(op); // Todo this should be folded by this point
-            write_verilog("%", value);
+            if op.left.datatype.primitive == .ENUM {
+                value := evaluate_constant_expression(op);
+                write_verilog("%", value);
+            } else if op.left.datatype.register_def {
+                reg := op.left.datatype.register_def;
+                ident := cast(*Ast_Identifier) op.right;
+
+                field_start_bit: int;
+                field: *Register_Def.Field;
+
+                for *reg.fields {
+                    if it.name == ident.name {
+                        field = it;
+                        break;
+                    }
+
+                    field_start_bit += it.width;
+                }
+
+                assert(field != null);
+                generate_expression(op.left);
+                write_verilog("[%:%]", field_start_bit + field.width - 1, field_start_bit);
+            } else {
+                assert(false);
+            }
         } else {
             info := get_operator_info(op.operation);
 

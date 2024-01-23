@@ -134,7 +134,7 @@ typecheck_block :: (block: *Ast_Block) {
 
             if lhs_type.enum_def {
                 if ass.expr.datatype.enum_def != lhs_type.enum_def {
-                    semantic_error(ass, "In this assignment, the left side has an enum tag, but the right side is not a value of that enum\n\n%", node_location_string(ass.target));
+                    semantic_error(ass, "In this assignment, the left side has an enum tag, but the right side is not a member of that enum\n\n%", node_location_string(ass));
                 }
             }
 
@@ -214,7 +214,7 @@ typecheck_expression :: (expr: *Ast_Node) {
         typecheck_expression(op.left);
 
         if op.operation == .OPERATOR_DOT {
-            if op.left.datatype.primitive != .ENUM && op.left.datatype.primitive != .REGISTER {
+            if op.left.datatype.primitive != .ENUM && !op.left.datatype.register_def {
                 semantic_error(op, "Dot dereference (.) used on type '%', but only works on enums or registers.\n\n%", op.left.datatype.primitive, node_location_string(op));
             }
 
@@ -222,13 +222,13 @@ typecheck_expression :: (expr: *Ast_Node) {
                 semantic_error(op, "Expected an identifier to the right of dot dereference (.).\n\n%", node_location_string(op));
             }
 
+            ident := cast(*Ast_Identifier) op.right;
+
             if op.left.datatype.primitive == .ENUM {
                 enum_def := op.left.datatype.enum_def;
                 op.datatype.primitive = .CONSTANT;
                 op.datatype.bit_width = op.left.datatype.bit_width;
                 op.datatype.enum_def = enum_def;
-
-                ident := cast(*Ast_Identifier) op.right;
 
                 found: bool;
                 for enum_def.fields if it.name == ident.name {
@@ -237,11 +237,27 @@ typecheck_expression :: (expr: *Ast_Node) {
                 }
 
                 if !found {
-                    semantic_error(op, "Name '%' was not found in the enum\n\n%", ident.name, node_location_string(op.right));
+                    semantic_error(op, "Name '%' was not found in the enum\n\n%", ident.name, node_location_string(op.right)); // Todo show the declaration
                 }
 
-            } else if op.left.datatype.primitive == .REGISTER {
-                assert(false);
+            } else if op.left.datatype.register_def != null {
+                reg := op.left.datatype.register_def;
+
+                field: *Register_Def.Field;
+                for *reg.fields if it.name == ident.name {
+                    field = it;
+                    break;
+                }
+
+                if field == null {
+                    semantic_error(op.left, "The name '%' was not found in the register\n\n%", ident.name, node_location_string(op.right)); // Todo show the declaration
+                }
+
+                op.datatype.primitive = op.left.datatype.primitive;
+                op.datatype.bit_width = field.width;
+                op.datatype.enum_def = field.enum_def;
+                op.datatype.register_def = field.register_def;
+
             } else {
                 assert(false);
             }
@@ -404,7 +420,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
                     new.enum_def = it.width_expr.datatype.enum_def;
                     if it.width_expr.datatype.bit_width == -1 {
                         ident := cast(*Ast_Identifier) it.width_expr;
-                        semantic_error(root, "This register contains an enum without a specific width:\n\n%\n\nThis is the enum (use `enum [N]` here):\n\n%", node_location_string(root), node_location_string(ident.resolved_declaration));
+                        semantic_error(root, "This register contains an enum without a specific width:\n\n%\n\nThis is the enum (use `enum[N]` here):\n\n%", node_location_string(root), node_location_string(ident.resolved_declaration));
                     }
                     new.width += it.width_expr.datatype.bit_width;
 
@@ -450,7 +466,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             root.datatype.enum_def = ident.datatype.enum_def;
 
             if root.datatype.bit_width == -1 {
-                semantic_error(ident, "Cannot create a circuit element based on an enum without a specific width:\n\n%\n\nUse `enum [N]` here:\n\n%", node_location_string(ident), node_location_string(ident.resolved_declaration.initialisation_value));
+                semantic_error(ident, "Cannot create a circuit element based on an enum without a specific width:\n\n%\n\nUse `enum[N]` here:\n\n%", node_location_string(ident), node_location_string(ident.resolved_declaration.initialisation_value));
             }
 
             assert(expr.datatype.enum_def != null);
@@ -512,7 +528,7 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
                 assert(op.right.kind == .IDENTIFIER);
 
                 ident := cast(*Ast_Identifier) op.right;
-
+                
                 for op.left.datatype.enum_def.fields {
                     if it.name == ident.name return it.value;
                 }
