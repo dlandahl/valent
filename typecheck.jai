@@ -282,7 +282,7 @@ typecheck_expression :: (expr: *Ast_Node) {
             typecheck_expression(it);
 
             if it.datatype.bit_width == -1 {
-                semantic_error(cat, "all entries of a concatenation must have an explicit width, but this one doesn't\n\n%\n\n", node_location_string(it));
+                semantic_error(cat, "all entries of a concatenation must have an explicit width, but this one doesn't\n\n%", node_location_string(it));
             }
             bit_width += it.datatype.bit_width;
 
@@ -335,7 +335,7 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
     prim := decl.datatype.primitive;
     if prim == .CONSTANT || prim == .CHIP || prim == .ENUM {
         if !decl.constant {
-            semantic_error(decl, "declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%\n\n", prim, node_location_string(decl)); // Todo: stringify type name
+            semantic_error(decl, "declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%", prim, node_location_string(decl)); // Todo: stringify type name
         }
     }
 
@@ -371,10 +371,15 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             last_value = new.value;
         }
 
+        bits_needed := bit_scan_reverse(largest);
+
         if _enum.width {
             root.datatype.bit_width = evaluate_constant_expression(_enum.width);
+            if root.datatype.bit_width < bits_needed {
+                semantic_error(root, "This enum requires % bits to represent its values, but has specifically been given a width of only %\n\n%\n", bits_needed, root.datatype.bit_width, node_location_string(_enum));
+            }
         } else {
-            root.datatype.bit_width = bit_scan_reverse(largest);
+            root.datatype.bit_width = -1;
         }
 
         return;
@@ -398,12 +403,15 @@ evaluate_type_expression :: (expr: *Ast_Node) {
                   case .ENUM;
                     new.enum_def = it.width_expr.datatype.enum_def;
                     if it.width_expr.datatype.bit_width == -1 {
-                        semantic_error(root, "This register contains an enum without a specific width:\n\n%", node_location_string(root));
+                        ident := cast(*Ast_Identifier) it.width_expr;
+                        semantic_error(root, "This register contains an enum without a specific width:\n\n%\n\nThis is the enum (use `enum [N]` here):\n\n%", node_location_string(root), node_location_string(ident.resolved_declaration));
                     }
                     new.width += it.width_expr.datatype.bit_width;
+
                   case .REGISTER;
                     new.register_def = it.width_expr.datatype.register_def;
                     new.width = it.width_expr.datatype.bit_width;
+
                   case;
                     new.width = evaluate_constant_expression(it.width_expr);
                 }
@@ -416,13 +424,20 @@ evaluate_type_expression :: (expr: *Ast_Node) {
 
         root.datatype.bit_width = total_width;
 
+        if reg.width_expr {
+            provided_width := evaluate_constant_expression(reg.width_expr);
+            if total_width != provided_width {
+                semantic_error(reg, "This register has been given an explicit width of % bits, but is actually % bits wide:\n\n%", provided_width, total_width, node_location_string(reg.width_expr));
+            }
+        }
+
         return;
     } else if expr.kind == .BINARY_OP { // Bus
         op := cast(*Ast_Binary_Op) expr;
 
         if op.operation != .OPEN_BRACKET {
             l := node_location_string(expr);
-            semantic_error(expr, "expected a type\n\n%\n\n", l);
+            semantic_error(expr, "expected a type\n\n%", l);
         }
 
         typecheck_expression(op.right);
@@ -434,7 +449,18 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             ident := cast(*Ast_Identifier) op.right;
             root.datatype.enum_def = ident.datatype.enum_def;
 
+            if root.datatype.bit_width == -1 {
+                semantic_error(ident, "Cannot create a circuit element based on an enum without a specific width:\n\n%\n\nUse `enum [N]` here:\n\n%", node_location_string(ident), node_location_string(ident.resolved_declaration.initialisation_value));
+            }
+
             assert(expr.datatype.enum_def != null);
+        } else if op.right.datatype.primitive == .REGISTER {
+            root.datatype.bit_width = op.right.datatype.bit_width;
+            assert(op.right.kind == .IDENTIFIER); // Todo error
+
+            ident := cast(*Ast_Identifier) op.right;
+            assert(ident.datatype.register_def != null);
+            root.datatype.register_def = ident.datatype.register_def;
         } else {
             root.datatype.bit_width = evaluate_constant_expression(op.right);
         }
@@ -446,7 +472,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
 
     if expr.kind != .IDENTIFIER {
         l := node_location_string(expr);
-        semantic_error(expr, "expected a type\n\n%\n\n", l);
+        semantic_error(expr, "expected a type\n\n%", l);
     }
 
     ident := cast(*Ast_Identifier) expr;
@@ -517,7 +543,7 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
             if prim == .CHIP || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
                 l1 := node_location_string(id);
                 l2 := node_location_string(id.resolved_declaration);
-                semantic_error(id, "This identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%\n\n", l1, l2);
+                semantic_error(id, "This identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%", l1, l2);
             }
 
             if id.resolved_declaration.datatype.is_type {
@@ -592,5 +618,5 @@ node_location_string :: (node: *Ast_Node) -> string {
     third.data += loc.end_char;
     third.count -= loc.end_char;
 
-    return tprint("line %:%[31m%[0m%", loc.line, first, second, third);
+    return tprint("(line %): %[31m%[0m%", loc.line, first, second, third);
 }

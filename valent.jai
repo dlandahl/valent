@@ -29,18 +29,24 @@ main :: () {
 
 TEST_PROGRAM :: #string END
 
-Letters :: enum {
+Reg :: register {
+    a;
+    b[4];
+    c[Letters];
+}
+
+Nested :: register [32] {
+    reg_a[Reg];
+    reg_b[Reg];
+}
+
+Letters :: enum [11] {
     A; B; C; D;
 }
 
-switch_test :: chip (clock: wire, condition: wire[Letters]) -> state: flipflop[2] {
-    sequential (clock) {
-        switch condition {
-           case Letters.A state <= 4;
-           case Letters.B state <= 10;
-           case Letters.C state <= 2;
-        }
-    }
+switch_test :: chip (clock: wire) -> state: flipflop[2] {
+
+    test: flipflop[Nested];
 }
 
 END;

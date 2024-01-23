@@ -163,7 +163,7 @@ generate_statement :: (stmt: *Ast_Node) {
         }
         context.code_generator.verilog.indentation_level -= 1;
 
-        write_verilog("endcase");
+        write_verilog("endcase\n");
     }
 }
 
