@@ -19,6 +19,7 @@ generate :: (top: *Ast_Declaration) -> string {
 
     code := builder_to_string(*context.code_generator.verilog.builder);
 
+    print("%\n", code);
     return code;
 }
 

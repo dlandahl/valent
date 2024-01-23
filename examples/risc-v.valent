@@ -39,7 +39,7 @@ Funct :: enum[3] {
     store_sw    :: b010;
 }
 
-Risc :: chip (clock: input, reset: input) {
+Risc :: module (clock: input, reset: input) {
 
     Exec_Stage :: enum[3] {
         FETCH;
@@ -68,6 +68,8 @@ Risc :: chip (clock: input, reset: input) {
         immediate [7];
     }
 
+    generate for 1..10 insert("stage[%1] <=,trunc stage[%1] + 1;", it);
+
     curr_inst: flipflop[RiscV_Inst];
     ram: Block_Ram(clock);
 
@@ -82,7 +84,7 @@ Risc :: chip (clock: input, reset: input) {
     }
 }
 
-Block_Ram :: chip (
+Block_Ram :: module (
     clock: wire,
     wr_en: wire[4],
     address: wire[32],

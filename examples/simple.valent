@@ -14,11 +14,18 @@ Float :: register[32] {
     mantissa[23];
 }
 
+Xmm :: register[128] {
+    f0[Float];
+    f1[Float];
+    f2[Float];
+    f3[Float];
+}
+
 clb :: combinational (a: wire[], b: wire[], c: wire[], d: wire[]) -> q: wire[] {
     q = (a & b) | (~c & d);
 }
 
-Adder :: chip (a: wire[8], b: wire[8]) -> c: wire[8] {
+Adder :: module (a: wire[8], b: wire[8]) -> c: wire[8] {
     combinational
         c = trunc a + b;
 
@@ -28,13 +35,13 @@ Adder :: chip (a: wire[8], b: wire[8]) -> c: wire[8] {
     }
 }
 
-Square_Wave :: chip (clock: wire, reset: wire, period: wire[]) -> wave: flipflop {
+Square_Wave :: module (clock: wire, reset: wire, period: wire[]) -> wave: flipflop {
     counter: flipflop[period.width];
 
     sequential (clock) if reset {
         counter <= 0;
     } else {
-        counter <=,trunc counter + 1;
+        {12 # 1'bZ, counter} <= counter + 1;
 
         if counter == period {
             counter <= 0;

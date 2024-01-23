@@ -206,7 +206,7 @@ parse :: (tokens: [] Token) -> *Ast_Block {
             third.data += loc.end_char;
             third.count -= loc.end_char;
 
-            print("\nline %:%[31m%[0m%\n", loc.line, first, second, third);
+            print("\n(line %): %[31m%[0m%\n", loc.line, first, second, third);
 
             return top_level;
         }
@@ -448,8 +448,10 @@ parse_declaration :: () -> *Ast_Declaration {
     decl.name = ident.string_value;
 
     if allow(.DOUBLE_COLON) {
+        is_type := peek_type();
         decl.initialisation_value = parse_expression();
         decl.constant = true;
+        decl.datatype.is_type = is_type;
     } else if allow(.COLON) {
         decl.type_expression = parse_expression();
         decl.constant = false;
@@ -499,6 +501,20 @@ parse_factor :: () -> *Ast_Node {
     return parse_atom();
 }
 
+peek_type :: () -> bool {
+    if peek(.KEYWORD_enum) return true;
+    if peek(.KEYWORD_chip) return true;
+    if peek(.KEYWORD_register) return true;
+
+    if peek(.IDENTIFIER) {
+        using context.parser;
+        id := tokens[token_index].string_value;
+        return id == "flipflop" || id == "wire";
+    }
+
+    return false;
+}
+
 parse_atom :: () -> *Ast_Node {
     atom: *Ast_Node;
 
@@ -532,6 +548,10 @@ parse_atom :: () -> *Ast_Node {
 
     else if peek(.KEYWORD_enum) {
         atom = parse_enum();
+    }
+
+    else if peek(.KEYWORD_register) {
+        atom = parse_register();
     }
 
     else if peek(.OPEN_BRACE) {
@@ -599,6 +619,36 @@ parse_enum :: () -> *Ast_Enum {
 
     _enum.fields = fields;
     return _enum;
+}
+
+parse_register :: () -> *Ast_Register {
+    expect(.KEYWORD_register);
+    register := Make_Ast(Ast_Register);
+
+    if allow(.OPEN_BRACKET) {
+        register.width_expr = parse_expression();
+        expect(.CLOSED_BRACKET);
+    }
+
+    expect(.OPEN_BRACE);
+
+    fields: [..] Ast_Register.Field;
+
+    while peek(.IDENTIFIER) {
+        new := array_add(*fields);
+        new.name = expect(.IDENTIFIER).string_value;
+
+        if allow(.OPEN_BRACKET) {
+            new.width_expr = parse_expression();
+            expect(.CLOSED_BRACKET);
+        }
+
+        expect(.SEMICOLON);
+    }
+
+    expect(.CLOSED_BRACE);
+    register.fields = fields;
+    return register;
 }
 
 parse_concat :: () -> *Ast_Concat {
@@ -723,6 +773,7 @@ expect :: (expected: .. Token_Kind) -> Token {
 
     if !error {
         error = true;
+        error_location = tokens[token_index-1].location;
         wanted = array_copy(expected);
         got = new.kind;
     }

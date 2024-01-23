@@ -1,11 +1,11 @@
 
 yosys :: #library "yosys";
 
-Rtlil_Module  :: void;
-Rtlil_Process :: void;
-Rtlil_Signal  :: void;
-Rtlil_Switch  :: void;
-Rtlil_Case  :: void;
+Rtlil_Module  :: #type,distinct void;
+Rtlil_Process :: #type,distinct void;
+Rtlil_Signal  :: #type,distinct void;
+Rtlil_Switch  :: #type,distinct void;
+Rtlil_Case    :: #type,distinct void;
 
 yosys_run_pass :: (command: *u8) #foreign yosys;
 

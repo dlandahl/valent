@@ -10,6 +10,7 @@ Ast_Node :: struct {
         LITERAL;
         CHIP;
         ENUM;
+        REGISTER;
         SEQUENTIAL_CIRCUIT;
         COMBINATIONAL_CIRCUIT;
         ASSIGNMENT;
@@ -162,6 +163,19 @@ Ast_Enum :: struct {
     fields: [] Field;
 }
 
+Ast_Register :: struct {
+    using #as node: Ast_Node;
+    node.kind = .REGISTER;
+
+    Field :: struct {
+        name: string;
+        width_expr: *Ast_Node;
+    }
+
+    width_expr: *Ast_Node;
+    fields: [] Field;
+}
+
 Ast_Sequential_Circuit :: struct {
     using #as node: Ast_Node;
     node.kind = .SEQUENTIAL_CIRCUIT;
@@ -208,11 +222,10 @@ Datatype :: struct {
     primitive: Primitive;
     bit_width: int; // -1 means constant with no specific width
     chip_input: bool;
+    is_type: bool;
 
-    union {
-        enum_def: *Enum_Def;
-        register_def: *Register_Def;
-    }
+    enum_def: *Enum_Def;
+    register_def: *Register_Def;
 }
 
 Enum_Def :: struct {
@@ -227,7 +240,16 @@ Enum_Def :: struct {
 }
 
 Register_Def :: struct {
+    decl: *Ast_Declaration;
 
+    Field :: struct {
+        name: string;
+        width: int;
+        enum_def: *Enum_Def;
+        register_def: *Register_Def;
+    }
+
+    fields: [..] Field;
 }
 
 Block_Type :: enum {
@@ -285,8 +307,8 @@ Token_Kind :: enum {
 
     _BEGIN_KEYWORDS;
     KEYWORD_chip;
-    KEYWORD_register;
     KEYWORD_enum;
+    KEYWORD_register;
     KEYWORD_combinational;
     KEYWORD_sequential;
     // KEYWORD_constant;

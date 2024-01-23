@@ -1,4 +1,6 @@
 
+BACKEND :: "RTLIL";
+
 #add_context rtlil: struct {
     current_module: *Rtlil_Module;
 }

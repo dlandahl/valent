@@ -319,13 +319,10 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
 
     if decl.typechecked return;
 
-    // Hack
-    if decl.initialisation_value && decl.initialisation_value.kind == .ENUM {
-        decl.type_expression = decl.initialisation_value;
-        decl.initialisation_value = null;
-    }
-
-    if decl.type_expression {
+    if decl.initialisation_value && decl.datatype.is_type {
+        evaluate_type_expression(decl.initialisation_value);
+        decl.datatype = decl.initialisation_value.datatype;
+    } else if decl.type_expression {
         evaluate_type_expression(decl.type_expression);
         decl.datatype = decl.type_expression.datatype;
     } else {
@@ -338,7 +335,7 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
     prim := decl.datatype.primitive;
     if prim == .CONSTANT || prim == .CHIP || prim == .ENUM {
         if !decl.constant {
-            semantic_error(decl, "declarations of type % must be constant. Use 'name :: value' here instead of 'name: type'\n\n%\n\n", prim, node_location_string(decl)); // Todo: stringify type name
+            semantic_error(decl, "declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%\n\n", prim, node_location_string(decl)); // Todo: stringify type name
         }
     }
 
@@ -382,6 +379,44 @@ evaluate_type_expression :: (expr: *Ast_Node) {
 
         return;
 
+    } else if expr.kind == .REGISTER {
+        root.datatype.primitive = .REGISTER;
+        root.datatype.register_def = New(Register_Def);
+
+        reg := cast(*Ast_Register) expr;
+
+        total_width: int;
+
+        for reg.fields {
+            new := array_add(*reg.datatype.register_def.fields);
+            new.name = it.name;
+
+            if it.width_expr {
+                typecheck_expression(it.width_expr);
+
+                if it.width_expr.datatype.primitive == {
+                  case .ENUM;
+                    new.enum_def = it.width_expr.datatype.enum_def;
+                    if it.width_expr.datatype.bit_width == -1 {
+                        semantic_error(root, "This register contains an enum without a specific width:\n\n%", node_location_string(root));
+                    }
+                    new.width += it.width_expr.datatype.bit_width;
+                  case .REGISTER;
+                    new.register_def = it.width_expr.datatype.register_def;
+                    new.width = it.width_expr.datatype.bit_width;
+                  case;
+                    new.width = evaluate_constant_expression(it.width_expr);
+                }
+            } else {
+                new.width = 1;
+            }
+
+            total_width += new.width;
+        }
+
+        root.datatype.bit_width = total_width;
+
+        return;
     } else if expr.kind == .BINARY_OP { // Bus
         op := cast(*Ast_Binary_Op) expr;
 
@@ -428,26 +463,22 @@ evaluate_type_expression :: (expr: *Ast_Node) {
     }
 }
 
-types_match :: (left: Datatype, right: Datatype) -> bool {
-    return true;
-}
-
 evaluate_constant_expression :: (expr: *Ast_Node) -> int {
 
     internal_evaluate :: (expr: *Ast_Node) -> int {
         if expr.kind == {
-            case .LITERAL;
+          case .LITERAL;
             lit := cast(*Ast_Literal) expr;
             return lit.int_value;
 
-            case .UNARY_OP;
+          case .UNARY_OP;
             op := cast(*Ast_Unary_Op) expr;
             arg := internal_evaluate(op.argument);
 
             if op.operation == .LOGIC_NOT return cast(int) !arg;
             if op.operation == .BIT_NOT return ~arg;
 
-            case .BINARY_OP;
+          case .BINARY_OP;
             op := cast(*Ast_Binary_Op) expr;
 
             if op.operation == .OPERATOR_DOT {
@@ -479,14 +510,18 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
                 case; assert(false);
             }
 
-            case .IDENTIFIER;
+          case .IDENTIFIER;
             id := cast(*Ast_Identifier) expr;
 
             prim := id.resolved_declaration.datatype.primitive;
             if prim == .CHIP || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
                 l1 := node_location_string(id);
                 l2 := node_location_string(id.resolved_declaration);
-                semantic_error(id, "this identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%\n\n", l1, l2);
+                semantic_error(id, "This identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%\n\n", l1, l2);
+            }
+
+            if id.resolved_declaration.datatype.is_type {
+                semantic_error(id, "Expected a constant expression, but got a type name:\n\n%\n\nDeclared here:\n\n%", node_location_string(id), node_location_string(id.resolved_declaration));
             }
 
             return internal_evaluate(id.resolved_declaration.initialisation_value); // Todo cache

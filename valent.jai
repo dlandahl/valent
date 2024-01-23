@@ -24,23 +24,22 @@ main :: () {
     if !context.parser.error {
         ast = typecheck(xx ast, top = "switch_test");
         v := generate(xx ast);
-        print("%\n", v);
     }
 }
 
 TEST_PROGRAM :: #string END
 
-Test_Enum :: enum {
+Letters :: enum {
     A; B; C; D;
 }
 
-k :: 10;
-
-switch_test :: chip (clock: wire, condition: wire[Test_Enum]) -> state: wire[2] {
-    combinational switch condition {
-         case Test_Enum.A state = 4;
-         case Test_Enum.B state = 10;
-         case Test_Enum.C state = 2;
+switch_test :: chip (clock: wire, condition: wire[Letters]) -> state: flipflop[2] {
+    sequential (clock) {
+        switch condition {
+           case Letters.A state <= 4;
+           case Letters.B state <= 10;
+           case Letters.C state <= 2;
+        }
     }
 }
 
