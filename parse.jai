@@ -187,9 +187,9 @@ parse :: (tokens: [] Token) -> *Ast_Block {
             print("\n");
 
             if parser.custom_report {
-                print("Parse error! %.\n", parser.custom_report);
+                print("Error: %.\n", parser.custom_report);
             } else {
-                print("Parse error! Wanted %, got %.\n", stringify_token(parser.wanted[0]), stringify_token(parser.got));
+                print("Error: Wanted %, got %.\n", stringify_token(parser.wanted[0]), stringify_token(parser.got));
             }
 
             loc := context.parser.error_location;

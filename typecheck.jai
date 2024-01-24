@@ -52,6 +52,7 @@ typecheck_chip :: (chip: *Ast_Chip) {
 
 Typechecker :: struct {
     current_block: *Ast_Block;
+    in_progress: [..] *Ast_Node;
 }
 
 #add_context typechecker: Typechecker;
@@ -186,32 +187,32 @@ typecheck_block :: (block: *Ast_Block) {
     block.typechecked = true;
 }
 
-currently_typechecking: [..] *Ast_Node;
-
 typecheck_expression :: (expr: *Ast_Node) {
     if expr.typechecked return;
 
-    if array_find(currently_typechecking, expr) {
-        builder: String_Builder;
-        defer free_buffers(*builder);
+    if expr.kind == .IDENTIFIER {
+        if array_find(context.typechecker.in_progress, expr) {
+            builder: String_Builder;
+            defer free_buffers(*builder);
 
-        print_to_builder(*builder, "This expression is involved in a circular dependency:\n\n%\n\n", node_location_string(currently_typechecking[0]));
+            print_to_builder(*builder, "This expression is involved in a circular dependency:\n\n%\n\n", node_location_string(context.typechecker.in_progress[0]));
 
-        for currently_typechecking {
-            if it_index == 0 continue;
-            print_to_builder(*builder, "... depends on\n%\n\n", node_location_string(it));
+            for context.typechecker.in_progress {
+                if it_index == 0 continue;
+                print_to_builder(*builder, "... % depends on\n%\n\n", ifx it_index == 1 then "it" else "which", node_location_string(it));
+            }
+
+            print_to_builder(*builder, "which we've seen before.");
+
+            semantic_error(expr, builder_to_string(*builder));
         }
 
-        print_to_builder(*builder, "which we've seen before.");
-
-        semantic_error(expr, builder_to_string(*builder));
+        array_add(*context.typechecker.in_progress, expr);
     }
 
-    array_add(*currently_typechecking, expr);
-
-    defer {
+    defer if expr.kind == .IDENTIFIER {
         expr.typechecked = true;
-        pop(*currently_typechecking);
+        pop(*context.typechecker.in_progress);
     }
 
     if expr.kind == {
@@ -361,8 +362,8 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
 
     if decl.typechecked return;
 
-    array_add(*currently_typechecking, decl);
-    defer pop(*currently_typechecking);
+    array_add(*context.typechecker.in_progress, decl);
+    defer pop(*context.typechecker.in_progress);
 
     if decl.initialisation_value && decl.datatype.is_type {
         evaluate_type_expression(decl.initialisation_value);
@@ -645,7 +646,7 @@ resolve_identifier :: (id: *Ast_Identifier) {
 }
 
 semantic_error :: (ast: *Ast_Node, report: string, format: .. Any) {
-    print("\nSemantic error: %\n", tprint(report, .. format));
+    print("\nError: %\n", tprint(report, .. format));
 
     exit(1);
 }

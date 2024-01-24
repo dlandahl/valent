@@ -231,7 +231,12 @@ generate_expression :: (expr: *Ast_Node) {
 
       case .IDENTIFIER;
         id := cast(*Ast_Identifier) expr;
-        write_verilog(id.name);
+
+        if id.resolved_declaration.constant {
+            write_verilog("%", evaluate_constant_expression(id));
+        } else {
+            write_verilog(id.name);
+        }
 
       case .BIT_SELECT;
         sel := cast(*Ast_Bit_Select) expr;

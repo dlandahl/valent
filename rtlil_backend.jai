@@ -219,6 +219,11 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
 
       case .IDENTIFIER;
         ident := cast(*Ast_Identifier) expr;
+
+        if ident.resolved_declaration.constant {
+            return rtlil_constant(xx evaluate_constant_expression(ident), 32);
+        }
+
         return rtlil_signal_by_name(current_module, to_c_string(tprint("$%", ident.name)));
 
       case .CONCAT;
