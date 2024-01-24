@@ -138,7 +138,10 @@ typecheck_block :: (block: *Ast_Block) {
                 }
             }
 
-            check_bit_width(ass, lhs_type, ass.expr.datatype);
+            if ass.trunc && lhs_type.bit_width < ass.expr.datatype.bit_width {
+            } else {
+                check_bit_width(ass, lhs_type, ass.expr.datatype);
+            }
 
           case .IF;
             _if := cast(*Ast_If) it;
@@ -183,10 +186,33 @@ typecheck_block :: (block: *Ast_Block) {
     block.typechecked = true;
 }
 
+currently_typechecking: [..] *Ast_Node;
+
 typecheck_expression :: (expr: *Ast_Node) {
     if expr.typechecked return;
 
-    defer expr.typechecked = true;
+    if array_find(currently_typechecking, expr) {
+        builder: String_Builder;
+        defer free_buffers(*builder);
+
+        print_to_builder(*builder, "This expression is involved in a circular dependency:\n\n%\n\n", node_location_string(currently_typechecking[0]));
+
+        for currently_typechecking {
+            if it_index == 0 continue;
+            print_to_builder(*builder, "... depends on\n%\n\n", node_location_string(it));
+        }
+
+        print_to_builder(*builder, "which we've seen before.");
+
+        semantic_error(expr, builder_to_string(*builder));
+    }
+
+    array_add(*currently_typechecking, expr);
+
+    defer {
+        expr.typechecked = true;
+        pop(*currently_typechecking);
+    }
 
     if expr.kind == {
       case .LITERAL;
@@ -335,6 +361,9 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
 
     if decl.typechecked return;
 
+    array_add(*currently_typechecking, decl);
+    defer pop(*currently_typechecking);
+
     if decl.initialisation_value && decl.datatype.is_type {
         evaluate_type_expression(decl.initialisation_value);
         decl.datatype = decl.initialisation_value.datatype;
@@ -401,6 +430,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         return;
 
     } else if expr.kind == .REGISTER {
+
         root.datatype.primitive = .REGISTER;
         root.datatype.register_def = New(Register_Def);
 
@@ -427,6 +457,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
                   case .REGISTER;
                     new.register_def = it.width_expr.datatype.register_def;
                     new.width = it.width_expr.datatype.bit_width;
+                    
 
                   case;
                     new.width = evaluate_constant_expression(it.width_expr);

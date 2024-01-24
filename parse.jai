@@ -321,6 +321,12 @@ parse_assignment :: () -> *Ast_Assignment {
     op := expect(.EQUALS, .OPERATOR_LESS_OR_EQUAL);
 
     ass := Make_Ast(Ast_Assignment);
+
+    if allow(.COMMA) {
+        expect(.KEYWORD_trunc);
+        ass.trunc = true;
+    }
+
     ass.expr = parse_expression();
     ass.type = ifx op.kind == .EQUALS then .COMBINATIONAL else .SEQUENTIAL;
     ass.target = lhs;
@@ -934,7 +940,6 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
         return source[cursor];
     }
 
-    start := cursor;
     result: Token;
 
     Emit :: (kind: Token_Kind) -> *Token #expand {
@@ -967,6 +972,8 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
         }
         cursor += 1;
     }
+
+    start := cursor;
 
     if current() == {
       case #char ","; Emit(.COMMA);
@@ -1201,6 +1208,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .KEYWORD_generate;      return "Keyword 'generate'";
       case .KEYWORD_switch;        return "Keyword 'switch'";
       case .KEYWORD_case;          return "Keyword 'case'";
+      case .KEYWORD_trunc;         return "Keyword 'trunc'";
       case .JAI_CODE;              return "Jai Code";
       case .ERROR;                 return "(Unrecognised token)";
       case .EOT;                   return "End Of Text";

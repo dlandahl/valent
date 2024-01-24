@@ -92,6 +92,8 @@ Ast_Assignment :: struct {
     target: *Ast_Node; // Concat or ident
     expr: *Ast_Node;
 
+    trunc: bool;
+
     type: enum {
         SEQUENTIAL;
         COMBINATIONAL;
@@ -322,6 +324,7 @@ Token_Kind :: enum {
     KEYWORD_generate;
     KEYWORD_switch;
     KEYWORD_case;
+    KEYWORD_trunc;
     _END_KEYWORDS;
 
     JAI_CODE;
