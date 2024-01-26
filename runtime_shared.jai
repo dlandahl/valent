@@ -8,7 +8,7 @@ Ast_Node :: struct {
         BINARY_OP;
         UNARY_OP;
         LITERAL;
-        CHIP;
+        MODULE;
         ENUM;
         REGISTER;
         SEQUENTIAL_CIRCUIT;
@@ -38,7 +38,7 @@ Ast_Declaration :: struct {
     initialisation_value: *Ast_Node;
 
     constant: bool;
-    chip_input: bool;
+    module_input: bool;
 }
 
 Ast_Concat :: struct {
@@ -143,9 +143,9 @@ Ast_Unary_Op :: struct {
     }
 }
 
-Ast_Chip :: struct {
+Ast_Module :: struct {
     using #as body: Ast_Block;
-    node.kind = .CHIP;
+    node.kind = .MODULE;
 
     constant_parameters: [] *Ast_Declaration;
     inputs: [] *Ast_Declaration;
@@ -215,7 +215,7 @@ Datatype :: struct {
         WIRE;
         LATCH;
         FLIPFLOP;
-        CHIP;
+        MODULE;
         ENUM;
         REGISTER;
         _COUNT;
@@ -223,7 +223,7 @@ Datatype :: struct {
 
     primitive: Primitive;
     bit_width: int; // -1 means constant with no specific width
-    chip_input: bool;
+    module_input: bool;
     is_type: bool;
 
     enum_def: *Enum_Def;
@@ -257,7 +257,7 @@ Register_Def :: struct {
 Block_Type :: enum {
     NONE;
     TOP_LEVEL;
-    CHIP;
+    MODULE;
     SEQUENTIAL;
     COMBINATIONAL;
     _COUNT;
@@ -308,7 +308,7 @@ Token_Kind :: enum {
     INTEGER;
 
     _BEGIN_KEYWORDS;
-    KEYWORD_chip;
+    KEYWORD_module;
     KEYWORD_enum;
     KEYWORD_register;
     KEYWORD_combinational;

@@ -17,3 +17,9 @@ x64/
 research
 yosys/YosysVS.vcxproj.user
 /yosys.dll
+/share/
+yosys-abc.exe
+valent.pdb
+valent.exe
+pthreadVC2.dll
+examples/required

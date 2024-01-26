@@ -10,8 +10,8 @@
 #load "runtime_shared.jai";
 #load "typecheck.jai";
 #load "parse.jai";
-// #load "verilog_backend.jai";
-#load "rtlil_backend.jai";
+#load "verilog_backend.jai";
+// #load "rtlil_backend.jai";
 
 #run main();
 
@@ -47,11 +47,11 @@ Nested :: register {
 Letters :: enum[5] {
     A;
     B;
-    C :: Letters.A;
+    C;
     D;
 }
 
-switch_test :: chip (clock: wire) -> state: flipflop[Nested] {
+switch_test :: module (clock: wire) -> state: flipflop[Nested] {
     test: flipflop[Reg];
 
     sequential (clock) {
@@ -63,7 +63,7 @@ END;
 
 /*
 
-inverter :: chip (clock: wire) -> f: wire {
+inverter :: module (clock: wire) -> f: wire {
 
     Test_Enum :: enum[5+5] {
         a :: 10;

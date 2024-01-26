@@ -56,7 +56,7 @@ check_statement_allowed_in_block :: (ast: *Ast_Node) {
                 return false, "Non-constant declaration at top level";
             }
 
-          case .CHIP;
+          case .MODULE;
           case .SEQUENTIAL;
             if ast.kind == .IF return true, "";
             if ast.kind == .SWITCH return true, "";
@@ -341,8 +341,8 @@ parse_block :: (block_type: Block_Type) -> *Ast_Block {
 
     block: *Ast_Block;
 
-    if block_type == .CHIP {
-        block = cast(*Ast_Block) Make_Ast(Ast_Chip);
+    if block_type == .MODULE {
+        block = cast(*Ast_Block) Make_Ast(Ast_Module);
     } else {
         block = Make_Ast(Ast_Block);
     }
@@ -509,7 +509,7 @@ parse_factor :: () -> *Ast_Node {
 
 peek_type :: () -> bool {
     if peek(.KEYWORD_enum) return true;
-    if peek(.KEYWORD_chip) return true;
+    if peek(.KEYWORD_module) return true;
     if peek(.KEYWORD_register) return true;
 
     if peek(.IDENTIFIER) {
@@ -548,8 +548,8 @@ parse_atom :: () -> *Ast_Node {
 //        atom = lit;
 //    }
 
-    else if peek(.KEYWORD_chip) {
-        atom = parse_chip();
+    else if peek(.KEYWORD_module) {
+        atom = parse_module();
     }
 
     else if peek(.KEYWORD_enum) {
@@ -677,18 +677,18 @@ parse_concat :: () -> *Ast_Concat {
     return cat;
 }
 
-parse_chip :: () -> *Ast_Chip {
-    expect(.KEYWORD_chip);
+parse_module :: () -> *Ast_Module {
+    expect(.KEYWORD_module);
 
     constants, inputs, outputs := parse_parameter_list();
 
-    chip := cast(*Ast_Chip) parse_block(.CHIP);
+    module := cast(*Ast_Module) parse_block(.MODULE);
 
-    chip.constant_parameters = constants;
-    chip.inputs = inputs;
-    chip.outputs = outputs;
+    module.constant_parameters = constants;
+    module.inputs = inputs;
+    module.outputs = outputs;
 
-    return chip;
+    return module;
 }
 
 parse_sequential_statement :: () -> *Ast_Sequential_Circuit {
@@ -726,7 +726,7 @@ parse_parameter_list :: () -> [] *Ast_Declaration, [] *Ast_Declaration, [] *Ast_
 
     while peek(.IDENTIFIER) {
         decl := parse_declaration();
-        decl.chip_input = true;
+        decl.module_input = true;
         array_add(*inputs, decl);
 
         if !allow(.COMMA) break;
@@ -1196,7 +1196,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .ARROW;                 return "Arrow (->)";
       case .IDENTIFIER;            return "Identifier";
       case .INTEGER;               return "Integer";
-      case .KEYWORD_chip;          return "Keyword 'chip'";
+      case .KEYWORD_module;        return "Keyword 'module'";
       case .KEYWORD_register;      return "Keyword 'register'";
       case .KEYWORD_enum;          return "Keyword 'enum'";
       case .KEYWORD_combinational; return "Keyword 'combinational'";

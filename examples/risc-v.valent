@@ -39,7 +39,7 @@ Funct :: enum[3] {
     store_sw    :: b010;
 }
 
-Risc :: module (clock: input, reset: input) {
+Risc :: module (clock: wire, reset: wire) {
 
     Exec_Stage :: enum[3] {
         FETCH;
@@ -54,8 +54,8 @@ Risc :: module (clock: input, reset: input) {
     sequential (clock) {
         stage <= stage + 1;
 
-        if stage == .WRITEBACK {
-            stage <= .FETCH;
+        if stage == Exec_Stage.WRITEBACK {
+            stage <= Exec_Stage.FETCH;
         }
     }
 
@@ -75,10 +75,10 @@ Risc :: module (clock: input, reset: input) {
 
     sequential (clock) {
         switch stage {
-          case .FETCH:
+          case Exec_Stage.FETCH:
             curr_inst <= cast(RiscV_Inst) ram.data_out;
 
-          case .DECODE:
+          case Exec_Stage.DECODE:
             curr_inst <= ram.data_out;
         }
     }

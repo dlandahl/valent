@@ -9,12 +9,12 @@ typecheck :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
 
         decl := cast(*Ast_Declaration) it;
         if decl.name == top {
-            assert(decl.initialisation_value.kind == .CHIP);
+            assert(decl.initialisation_value.kind == .MODULE);
 
-            decl.datatype.primitive = .CHIP;
+            decl.datatype.primitive = .MODULE;
             decl.typechecked = true;
 
-            typecheck_chip(cast(*Ast_Chip) decl.initialisation_value);
+            typecheck_module(cast(*Ast_Module) decl.initialisation_value);
             return decl;
         }
     }
@@ -24,30 +24,30 @@ typecheck :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
     return null;
 }
 
-typecheck_chip :: (chip: *Ast_Chip) {
-    assert(chip.constant_parameters.count == 0, "To do");
-    context.typechecker.current_block = chip;
+typecheck_module :: (module: *Ast_Module) {
+    assert(module.constant_parameters.count == 0, "To do");
+    context.typechecker.current_block = module;
 
-    for chip.inputs {
+    for module.inputs {
         evaluate_type_expression(it.type_expression);
         it.datatype = it.type_expression.datatype;
 
         if it.type_expression.datatype.primitive != .WIRE {
-            semantic_error(it, "each input port of a chip must a be wire or a bus of wires");
+            semantic_error(it, "each input port of a module must a be wire or a bus of wires");
         }
     }
 
-    for chip.outputs {
+    for module.outputs {
         evaluate_type_expression(it.type_expression);
         it.datatype = it.type_expression.datatype;
 
         // Todo: say what the type was
         if it.type_expression.datatype.primitive != .WIRE && it.type_expression.datatype.primitive != .FLIPFLOP {
-            semantic_error(it, "each output port of a chip must a be wire, a flipflop, or a bus of wires or flipflops");
+            semantic_error(it, "each output port of a module must a be wire, a flipflop, or a bus of wires or flipflops");
         }
     }
 
-    typecheck_block(cast(*Ast_Block) chip);
+    typecheck_block(cast(*Ast_Block) module);
 }
 
 Typechecker :: struct {
@@ -72,12 +72,12 @@ typecheck_block :: (block: *Ast_Block) {
         table_add(*names, decl.name, decl);
     }
 
-    if block.block_type == .CHIP {
-        chip := cast(*Ast_Chip) block;
+    if block.block_type == .MODULE {
+        module := cast(*Ast_Module) block;
 
-        for chip.constant_parameters Duplication_Check(it);
-        for chip.inputs              Duplication_Check(it);
-        for chip.outputs             Duplication_Check(it);
+        for module.constant_parameters Duplication_Check(it);
+        for module.inputs              Duplication_Check(it);
+        for module.outputs             Duplication_Check(it);
     }
 
     context.typechecker.current_block = block;
@@ -129,8 +129,8 @@ typecheck_block :: (block: *Ast_Block) {
                 semantic_error(ass, "combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
             }
 
-            if lhs_type.chip_input {
-                semantic_error(ass, "a chip input parameter must not be the target of an assignment\n\n%", node_location_string(ass.target));
+            if lhs_type.module_input {
+                semantic_error(ass, "a module input parameter must not be the target of an assignment\n\n%", node_location_string(ass.target));
             }
 
             if lhs_type.enum_def {
@@ -332,7 +332,7 @@ typecheck_expression :: (expr: *Ast_Node) {
             any_flipflops ||= it.datatype.primitive == .FLIPFLOP;
             any_wires     ||= it.datatype.primitive == .WIRE;
 
-            cat.datatype.chip_input ||= it.datatype.chip_input;
+            cat.datatype.module_input ||= it.datatype.module_input;
         }
 
         cat.datatype.bit_width = bit_width;
@@ -376,10 +376,10 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
         typecheck_expression(decl.initialisation_value);
         decl.datatype = decl.initialisation_value.datatype;
     }
-    decl.datatype.chip_input = decl.chip_input;
+    decl.datatype.module_input = decl.module_input;
 
     prim := decl.datatype.primitive;
-    if prim == .CONSTANT || prim == .CHIP || prim == .ENUM {
+    if prim == .CONSTANT || prim == .MODULE || prim == .ENUM {
         if !decl.constant {
             semantic_error(decl, "declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%", prim, node_location_string(decl)); // Todo: stringify type name
         }
@@ -588,7 +588,7 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
             id := cast(*Ast_Identifier) expr;
 
             prim := id.resolved_declaration.datatype.primitive;
-            if prim == .CHIP || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
+            if prim == .MODULE || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
                 l1 := node_location_string(id);
                 l2 := node_location_string(id.resolved_declaration);
                 semantic_error(id, "This identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%", l1, l2);
@@ -612,12 +612,12 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
 resolve_identifier :: (id: *Ast_Identifier) {
 
     search_in_block :: (block: *Ast_Block, name: string) -> *Ast_Declaration {
-        if block.block_type == .CHIP {
-            chip := cast(*Ast_Chip) block;
+        if block.block_type == .MODULE {
+            module := cast(*Ast_Module) block;
 
-            for chip.constant_parameters if it.name == name return it;
-            for chip.inputs if it.name == name return it;
-            for chip.outputs if it.name == name return it;
+            for module.constant_parameters if it.name == name return it;
+            for module.inputs if it.name == name return it;
+            for module.outputs if it.name == name return it;
         }
 
         for block.statements {

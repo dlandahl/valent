@@ -7,7 +7,7 @@ Thing :: enum {
 
 }
 
-Lfsr_Updown :: chip <thing: Thing> (clk: wire, reset: wire, enable: wire, up_down: wire) -> (count: flipflop[8], overflow: wire) {
+Lfsr_Updown :: module <thing: Thing> (clk: wire, reset: wire, enable: wire, up_down: wire) -> (count: flipflop[8], overflow: wire) {
 
     combinational
         if up_down  overflow = count == 8'b0000_0001;

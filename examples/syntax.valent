@@ -4,7 +4,7 @@
 
 Image_Data :: external;
 
-Block_Ram :: chip <depth: constant> (clk: wire, wr_en: wire, address: wire[32], data: wire[8]) -> data: flipflop[8] {
+Block_Ram :: module <depth: constant> (clk: wire, wr_en: wire, address: wire[32], data: wire[8]) -> data: flipflop[8] {
 
     memory: [depth] flipflop[8];
 
@@ -33,7 +33,7 @@ Vga_Signal :: register {
     vsync;
 }
 
-Vga_Generator :: chip <format: Vga_Format, some_circuit: combinational> (clk: wire) -> (vga_signal: flipflop[Vga_Signal]) {
+Vga_Generator :: module <format: Vga_Format, some_circuit: combinational> (clk: wire) -> (vga_signal: flipflop[Vga_Signal]) {
 
     pixel_clock: wire;
     mmcm: Mmcm<100>(clk) -> pixel_clock;

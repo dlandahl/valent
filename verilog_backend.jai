@@ -10,12 +10,12 @@ Code_Generator :: struct {
 #add_context code_generator: Code_Generator;
 
 generate :: (top: *Ast_Declaration) -> string {
-    assert(top.initialisation_value.kind == .CHIP);
+    assert(top.initialisation_value.kind == .MODULE);
 
     init_string_builder(*context.code_generator.verilog.builder);
 
     write_verilog("\n");
-    generate_chip(top);
+    generate_module(top);
 
     code := builder_to_string(*context.code_generator.verilog.builder);
 
@@ -23,12 +23,12 @@ generate :: (top: *Ast_Declaration) -> string {
     return code;
 }
 
-generate_chip :: (decl: *Ast_Declaration) {
+generate_module :: (decl: *Ast_Declaration) {
     write_verilog("module %(\n", decl.name);
 
-    chip := cast(*Ast_Chip) decl.initialisation_value;
+    module := cast(*Ast_Module) decl.initialisation_value;
 
-    for chip.inputs {
+    for module.inputs {
         write_verilog("    input %", it.name);
 
         if it.datatype.bit_width > 1 {
@@ -37,21 +37,21 @@ generate_chip :: (decl: *Ast_Declaration) {
         write_verilog(",\n");
     }
 
-    for chip.outputs {
+    for module.outputs {
         write_verilog("    output %1%2", ifx it.datatype.primitive == .FLIPFLOP then "reg " else "", it.name);
 
         if it.datatype.bit_width > 1 {
             write_verilog("[%:0]", it.datatype.bit_width-1);
         }
 
-        if it_index != chip.outputs.count-1 write_verilog(",");
+        if it_index != module.outputs.count-1 write_verilog(",");
         write_verilog("\n");
     }
 
     write_verilog("  );\n\n");
 
     context.code_generator.verilog.indentation_level += 1;
-    for chip.statements {
+    for module.statements {
         generate_statement(it);
     }
     context.code_generator.verilog.indentation_level -= 1;

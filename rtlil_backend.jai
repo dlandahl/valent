@@ -7,11 +7,9 @@ BACKEND :: "RTLIL";
 
 generate :: (top: *Ast_Declaration) {
     rtlil_initialise_design();
-    module := rtlil_add_module(to_c_string(tprint("$%", top.name)));
+    context.rtlil.current_module = rtlil_add_module(to_c_string(tprint("$%", top.name)));
 
-    context.rtlil.current_module = module;
-
-    chip := cast(*Ast_Chip) top.initialisation_value;
+    module := cast(*Ast_Module) top.initialisation_value;
 
     port_index: s32 = 1;
 
@@ -19,17 +17,17 @@ generate :: (top: *Ast_Declaration) {
         name := to_c_string(tprint("$%", decl.name));
         width := cast(s32) decl.datatype.bit_width;
 
-        rtlil_add_wire(module, name, width, port_index, port_type == .INPUT, port_type == .OUTPUT);
+        rtlil_add_wire(context.rtlil.current_module, name, width, port_index, port_type == .INPUT, port_type == .OUTPUT);
 
         if port_type != .NEITHER {
             port_index += 1;
         }
     }
 
-    for chip.outputs Add_Wire(it, .OUTPUT);
-    for chip.inputs  Add_Wire(it, .INPUT);
+    for module.outputs Add_Wire(it, .OUTPUT);
+    for module.inputs  Add_Wire(it, .INPUT);
 
-    for chip.statements if it.kind == .DECLARATION {
+    for module.statements if it.kind == .DECLARATION {
         decl := cast(*Ast_Declaration) it;
 
         if decl.datatype.primitive == .FLIPFLOP || decl.datatype.primitive == .WIRE {
@@ -37,7 +35,7 @@ generate :: (top: *Ast_Declaration) {
         }
     }
 
-    for chip.statements {
+    for module.statements {
         if it.kind == .COMBINATIONAL_CIRCUIT {
             comb := cast(*Ast_Combinational_Circuit) it;
             generate_process(comb.block);
@@ -53,7 +51,7 @@ generate :: (top: *Ast_Declaration) {
         }
     }
 
-    rtlil_finish_module(module);
+    rtlil_finish_module(context.rtlil.current_module);
     rtlil_done();
 
     yosys_run_pass("dump");
