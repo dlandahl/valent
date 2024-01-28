@@ -1,4 +1,13 @@
 
+/* Todo:
+
+== result width
+Verilog declarations at the top
+Verilog width goes before the name
+always @* not allowed on wires
+
+*/
+
 Uart_Tx_Ctrl :: module (
     clock: wire,
     send: wire,
@@ -16,7 +25,7 @@ Uart_Tx_Ctrl :: module (
     }
 
 
-    Tx_State :: enum {
+    Tx_State :: enum[2] {
        RDY;
        LOAD_BIT;
        SEND_BIT;
@@ -28,25 +37,28 @@ Uart_Tx_Ctrl :: module (
     // and update the output transfer value
     sequential (clock) {
         switch tx_state {
-          case Tx_State.RDY
-            uart_tx <= 1;
-            if send tx_state <= Tx_State.LOAD_BIT;
+            case Tx_State.RDY {
+                uart_tx <= 1;
+                if send tx_state <= Tx_State.LOAD_BIT;
+            }
 
-          case Tx_State.LOAD_BIT
-            uart_tx <= tx_data[bit_index];
-            tx_state <= Tx_State.SEND_BIT;
+            case Tx_State.LOAD_BIT {
+                uart_tx <= tx_data[bit_index];
+                tx_state <= Tx_State.SEND_BIT;
+            }
 
-          case Tx_State.SEND_BIT
-            if bit_done {
-                if bit_index == BIT_INDEX_MAX
-                    tx_state <= Tx_State.RDY;
-                else
-                    tx_state <= Tx_State.LOAD_BIT;
+            case Tx_State.SEND_BIT {
+                if bit_done {
+                    if bit_index == BIT_INDEX_MAX
+                        tx_state <= Tx_State.RDY;
+                    else
+                        tx_state <= Tx_State.LOAD_BIT;
+                }
             }
         }
     }
 
-    combinational ready = tx_state == .RDY;
+    combinational ready = (tx_state == Tx_State.RDY)[0];
 
 
     // Track which bit of tx_data should currently be sent
@@ -66,7 +78,7 @@ Uart_Tx_Ctrl :: module (
 
     bit_timer: flipflop[14];
     bit_done: wire;
-    combinational bit_done = bit_timer == BIT_TIMER_MAX;
+    combinational bit_done = (bit_timer == BIT_TIMER_MAX)[0];
 
     sequential (clock) {
         if tx_state == Tx_State.RDY || bit_done {
