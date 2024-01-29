@@ -1,28 +1,30 @@
 
+#scope_module
+
 #import "Hash_Table";
 
-typecheck :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
-
-    for top_level.statements {
-        // Todo: check for duplicate names at top level
-        assert(it.kind == .DECLARATION);
-
-        decl := cast(*Ast_Declaration) it;
-        if decl.name == top {
-            assert(decl.initialisation_value.kind == .MODULE);
-
-            decl.datatype.primitive = .MODULE;
-            decl.typechecked = true;
-
-            typecheck_module(cast(*Ast_Module) decl.initialisation_value);
-            return decl;
-        }
-    }
-
-    semantic_error(top_level, "top module '%' was not found in the provided program", top);
-
-    return null;
-}
+// typecheck :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
+// 
+//     for top_level.statements {
+//         // Todo: check for duplicate names at top level
+//         assert(it.kind == .DECLARATION);
+// 
+//         decl := cast(*Ast_Declaration) it;
+//         if decl.name == top {
+//             assert(decl.initialisation_value.kind == .MODULE);
+// 
+//             decl.datatype.primitive = .MODULE;
+//             decl.typechecked = true;
+// 
+//             typecheck_module(cast(*Ast_Module) decl.initialisation_value);
+//             return decl;
+//         }
+//     }
+// 
+//     semantic_error(top_level, "top module '%' was not found in the provided program", top);
+// 
+//     return null;
+// }
 
 typecheck_module :: (module: *Ast_Module) {
     assert(module.constant_parameters.count == 0, "To do");
@@ -33,7 +35,7 @@ typecheck_module :: (module: *Ast_Module) {
         it.datatype = it.type_expression.datatype;
 
         if it.type_expression.datatype.primitive != .WIRE {
-            semantic_error(it, "each input port of a module must a be wire or a bus of wires");
+            semantic_error(it, "Each input port of a module must a be wire or a bus of wires\n\n%", node_location_string(it));
         }
     }
 
@@ -43,7 +45,7 @@ typecheck_module :: (module: *Ast_Module) {
 
         // Todo: say what the type was
         if it.type_expression.datatype.primitive != .WIRE && it.type_expression.datatype.primitive != .FLIPFLOP {
-            semantic_error(it, "each output port of a module must a be wire, a flipflop, or a bus of wires or flipflops");
+            semantic_error(it, "Each output port of a module must a be wire, a flipflop, or a bus of wires or flipflops\n\n%", node_location_string(it));
         }
     }
 
@@ -297,6 +299,7 @@ typecheck_expression :: (expr: *Ast_Node) {
 
                 if op.operation == .OPERATOR_ADD       op.datatype.bit_width += 1;
                 if op.operation == .OPERATOR_MULTIPLY  op.datatype.bit_width *= 2;
+                if op.operation == .OPERATOR_EQUALS    op.datatype.bit_width = 1;
 
             } else {
                 if op.right.kind == .BIT_SELECT {
@@ -338,6 +341,11 @@ typecheck_expression :: (expr: *Ast_Node) {
         cat.datatype.bit_width = bit_width;
         if any_flipflops && !any_wires cat.datatype.primitive = .FLIPFLOP;
         if !any_flipflops && any_wires cat.datatype.primitive = .WIRE;
+
+      case .MODULE;
+        print("Found module\n");
+        mod := cast(*Ast_Module) expr;
+        typecheck_module(mod);
     }
 }
 
@@ -485,7 +493,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
 
         if op.operation != .OPEN_BRACKET {
             l := node_location_string(expr);
-            semantic_error(expr, "expected a type\n\n%", l);
+            semantic_error(expr, "Expected a type here.\n\n%", l);
         }
 
         typecheck_expression(op.right);
@@ -514,13 +522,16 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         }
 
         expr = op.left;
+    } else if expr.kind == .MODULE {
+        typecheck_module(cast(*Ast_Module) expr);
+        return;
     } else {
         expr.datatype.bit_width = 1;
     }
 
     if expr.kind != .IDENTIFIER {
         l := node_location_string(expr);
-        semantic_error(expr, "expected a type\n\n%", l);
+        semantic_error(expr, "Expected a type here.\n\n%", l);
     }
 
     ident := cast(*Ast_Identifier) expr;
@@ -602,6 +613,7 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
         }
 
         assert(false);
+        semantic_error(expr, "Tried to constant-evaluate an expression \n\n%\n", node_location_string(expr));
         return 0;
     }
 

@@ -1,4 +1,6 @@
 
+#scope_module
+
 Parser :: struct {
     tokens: [] Token;
     token_index: int;
@@ -236,7 +238,7 @@ parse_statement :: () -> *Ast_Node {
         }
 
         using context.parser;
-        parse_error("Expected this identifier to be an assignment or a declaration, but it was followed by a token of kind %", stringify_token(tokens[token_index+1].kind));
+        parse_error("Expected this expression to be an assignment or a declaration, but it was followed by a token of kind %", stringify_token(tokens[token_index+1].kind));
 
         return null;
     }
@@ -319,7 +321,6 @@ parse_assignment :: () -> *Ast_Assignment {
     }
 
     op := expect(.EQUALS, .OPERATOR_LESS_OR_EQUAL);
-
     ass := Make_Ast(Ast_Assignment);
 
     if allow(.COMMA) {
@@ -1042,6 +1043,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
       case #char ">";
         cursor += 1;
         if current() == #char "="  Emit(.OPERATOR_GREATER_OR_EQUAL);
+        else if current() == #char ">"  Emit(.OPERATOR_SHIFT_RIGHT);
         else {
             cursor -= 1;
             Emit(.OPERATOR_GREATER_THAN);

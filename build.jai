@@ -15,11 +15,11 @@
     copy_file(tprint("yosys/x64/%/yosys.lib", dir), "modules/yosys.lib");
     copy_file(tprint("yosys/x64/%/yosys.dll", dir), "yosys.dll");
 
-    ws := compiler_create_workspace("valent");
+    ws := compiler_create_workspace("cli");
 
     bo := get_build_options(ws);
     bo.output_executable_name = "valent";
     set_build_options(bo, ws);
 
-    add_build_file("valent.jai", ws);
+    add_build_file("cli.jai", ws);
 }

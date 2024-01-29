@@ -1,11 +1,11 @@
 
-BACKEND :: "RTLIL";
+#scope_module
 
 #add_context rtlil: struct {
     current_module: *Rtlil_Module;
 }
 
-generate :: (top: *Ast_Declaration) {
+generate_rtlil :: (top: *Ast_Declaration) {
     rtlil_initialise_design();
     context.rtlil.current_module = rtlil_add_module(to_c_string(tprint("$%", top.name)));
 
@@ -57,6 +57,8 @@ generate :: (top: *Ast_Declaration) {
     yosys_run_pass("dump");
     // yosys_run_pass("proc; opt; write_verilog");
 }
+
+#scope_file
 
 generate_process :: (block: *Ast_Block, sync: *Rtlil_Signal = null) {
     using context.rtlil;
@@ -132,6 +134,7 @@ generate_circuit_block :: (block: *Ast_Block, process: *Rtlil_Process, parent: *
             sw := rtlil_add_switch(process, parent, condition);
 
             for switch.cases {
+                print("Generating case %\n", node_location_string(it.compare));
                 match := generate_expression(it.compare);
                 c := rtlil_add_case(sw, match);
                 generate_circuit_block(it.block, process, c);
@@ -152,7 +155,6 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
       case .BIT_SELECT; return null; // Handled by BINARY_OP
       case .BINARY_OP;
         op := cast(*Ast_Binary_Op) expr;
-        left := generate_expression(op.left);
 
         if op.operation == .OPEN_BRACKET {
             start, end: s32;
@@ -166,6 +168,7 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
                 end = -1;
             }
 
+            left := generate_expression(op.left);
             return rtlil_bit_select(left, cast(s32) start, cast(s32) end);
 
         } else if op.operation == .OPERATOR_DOT {
@@ -190,12 +193,14 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
                 }
 
                 assert(field != null);
+                left := generate_expression(op.left);
                 return rtlil_bit_select(left, xx field_start_bit, cast(s32) (field_start_bit + field.width));
             } else {
                 assert(false);
             }
 
         } else {
+            left := generate_expression(op.left);
             right := generate_expression(op.right);
 
             info := get_operator_info(op.operation);

@@ -1,12 +1,9 @@
 
-/* Todo:
-
-== result width
-Verilog declarations at the top
-Verilog width goes before the name
-always @* not allowed on wires
-
-*/
+// jai {
+//     width_of :: (obj: *Valent_Object) -> Valent_Constant {
+//         return obj.bit_width;
+//     }
+// }
 
 Uart_Tx_Ctrl :: module (
     clock: wire,
@@ -17,7 +14,13 @@ Uart_Tx_Ctrl :: module (
     uart_tx: flipflop
   ) {
 
-    tx_data: flipflop[10];
+    Uart_Frame :: register {
+        stop_bit;
+        data[8];
+        start_bit;
+    }
+
+    tx_data: flipflop[Uart_Frame];
 
     // When `send` goes high, latch signal to be sent into the `tx_data` register
     sequential (clock) {
@@ -43,7 +46,7 @@ Uart_Tx_Ctrl :: module (
             }
 
             case Tx_State.LOAD_BIT {
-                uart_tx <= tx_data[bit_index];
+                uart_tx <= (tx_data >> bit_index)[0];
                 tx_state <= Tx_State.SEND_BIT;
             }
 
@@ -58,11 +61,11 @@ Uart_Tx_Ctrl :: module (
         }
     }
 
-    combinational ready = (tx_state == Tx_State.RDY)[0];
+    combinational ready = tx_state == Tx_State.RDY;
 
 
     // Track which bit of tx_data should currently be sent
-    BIT_INDEX_MAX :: 10;
+    BIT_INDEX_MAX :: 10; // width_of(Uart_Frame);
     bit_index: flipflop[4];
 
     sequential (clock) {
@@ -78,7 +81,7 @@ Uart_Tx_Ctrl :: module (
 
     bit_timer: flipflop[14];
     bit_done: wire;
-    combinational bit_done = (bit_timer == BIT_TIMER_MAX)[0];
+    combinational bit_done = bit_timer == BIT_TIMER_MAX;
 
     sequential (clock) {
         if tx_state == Tx_State.RDY || bit_done {

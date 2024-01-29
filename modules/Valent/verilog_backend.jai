@@ -1,27 +1,27 @@
 
-Code_Generator :: struct {
-    verilog: struct {
-        builder: String_Builder;
-        indentation_level: int;
-        last_write_ended_in_a_newline: bool;
-    }
+#scope_module
+
+#add_context verilog: struct {
+    builder: String_Builder;
+    indentation_level: int;
+    last_write_ended_in_a_newline: bool;
 }
 
-#add_context code_generator: Code_Generator;
-
-generate :: (top: *Ast_Declaration) -> string {
+generate_verilog :: (top: *Ast_Declaration) -> string {
     assert(top.initialisation_value.kind == .MODULE);
 
-    init_string_builder(*context.code_generator.verilog.builder);
+    init_string_builder(*context.verilog.builder);
 
     write_verilog("\n");
     generate_module(top);
 
-    code := builder_to_string(*context.code_generator.verilog.builder);
+    code := builder_to_string(*context.verilog.builder);
 
     print("%\n", code);
     return code;
 }
+
+#scope_file
 
 generate_module :: (decl: *Ast_Declaration) {
     write_verilog("module %(\n", decl.name);
@@ -29,32 +29,41 @@ generate_module :: (decl: *Ast_Declaration) {
     module := cast(*Ast_Module) decl.initialisation_value;
 
     for module.inputs {
-        write_verilog("    input %", it.name);
+        write_verilog("    input ");
 
         if it.datatype.bit_width > 1 {
-            write_verilog("[%:0]", it.datatype.bit_width-1);
+            write_verilog("[%:0] ", it.datatype.bit_width-1);
         }
-        write_verilog(",\n");
+        write_verilog("%,\n", it.name);
     }
 
     for module.outputs {
-        write_verilog("    output %1%2", ifx it.datatype.primitive == .FLIPFLOP then "reg " else "", it.name);
+        write_verilog("    output %", ifx it.datatype.primitive == .FLIPFLOP then "reg " else "");
 
         if it.datatype.bit_width > 1 {
-            write_verilog("[%:0]", it.datatype.bit_width-1);
+            write_verilog("[%:0] ", it.datatype.bit_width-1);
         }
 
+        write_verilog("%", it.name);
         if it_index != module.outputs.count-1 write_verilog(",");
         write_verilog("\n");
     }
 
     write_verilog("  );\n\n");
 
-    context.code_generator.verilog.indentation_level += 1;
+    context.verilog.indentation_level += 1;
     for module.statements {
-        generate_statement(it);
+        if it.kind == .DECLARATION {
+            generate_statement(it);
+        }
     }
-    context.code_generator.verilog.indentation_level -= 1;
+
+    for module.statements {
+        if it.kind != .DECLARATION {
+            generate_statement(it);
+        }
+    }
+    context.verilog.indentation_level -= 1;
 
     write_verilog("endmodule\n");
 }
@@ -69,6 +78,8 @@ generate_statement :: (stmt: *Ast_Node) {
         if      t.primitive == .FLIPFLOP write_verilog("reg ");
         else if t.primitive == .WIRE     write_verilog("wire ");
         else if t.primitive == .ENUM     return;
+        else if t.primitive == .CONSTANT return;
+        else if t.primitive == .REGISTER return;
 
         if t.bit_width > 1 {
             write_verilog("[%:0] ", t.bit_width-1);
@@ -81,33 +92,35 @@ generate_statement :: (stmt: *Ast_Node) {
         seq := cast(*Ast_Sequential_Circuit) stmt;
         write_verilog("always @ (posedge %) begin\n", seq.clock.name);
 
-        context.code_generator.verilog.indentation_level += 1;
+        context.verilog.indentation_level += 1;
         for seq.block.statements {
             generate_statement(it);
         }
-        context.code_generator.verilog.indentation_level -= 1;
+        context.verilog.indentation_level -= 1;
 
         write_verilog("\nend\n");
 
       case .COMBINATIONAL_CIRCUIT;
         comb := cast(*Ast_Combinational_Circuit) stmt;
-        write_verilog("always @* ");
+        // write_verilog("always @* ");
+        // 
+        // if comb.block.statements.count > 1 {
+        //     write_verilog("begin\n");
+        // }
 
-        if comb.block.statements.count > 1 {
-            write_verilog("begin\n");
-        }
-
-        context.code_generator.verilog.indentation_level += 1;
         for comb.block.statements {
             generate_statement(it);
         }
-        context.code_generator.verilog.indentation_level -= 1;
 
-        if comb.block.statements.count > 1 write_verilog("\nend");
+        // if comb.block.statements.count > 1 write_verilog("\nend");
         write_verilog("\n");
 
       case .ASSIGNMENT;
         ass := cast(*Ast_Assignment) stmt;
+
+        if ass.type == .COMBINATIONAL {
+            write_verilog("assign ");
+        }
 
         generate_expression(ass.target);
         write_verilog(ifx ass.type == .SEQUENTIAL " <= " else " = ");
@@ -121,22 +134,22 @@ generate_statement :: (stmt: *Ast_Node) {
         generate_expression(_if.condition);
         write_verilog(") begin\n");
 
-        context.code_generator.verilog.indentation_level += 1;
+        context.verilog.indentation_level += 1;
 
         for _if.block.statements {
             generate_statement(it);
         }
 
-        context.code_generator.verilog.indentation_level -= 1;
+        context.verilog.indentation_level -= 1;
 
         if _if.else_block {
             write_verilog("end else begin\n");
 
-            context.code_generator.verilog.indentation_level += 1;
+            context.verilog.indentation_level += 1;
             for _if.else_block.statements {
                 generate_statement(it);
             }
-            context.code_generator.verilog.indentation_level -= 1;
+            context.verilog.indentation_level -= 1;
         }
 
         write_verilog("end\n");
@@ -148,20 +161,20 @@ generate_statement :: (stmt: *Ast_Node) {
         generate_expression(switch.condition);
         write_verilog(")\n");
 
-        context.code_generator.verilog.indentation_level += 1;
+        context.verilog.indentation_level += 1;
         for switch.cases {
             value := evaluate_constant_expression(it.compare);
             write_verilog("%: begin\n", value);
 
-            context.code_generator.verilog.indentation_level += 1;
+            context.verilog.indentation_level += 1;
             for it.block.statements {
                 generate_statement(it);
             }
-            context.code_generator.verilog.indentation_level -= 1;
+            context.verilog.indentation_level -= 1;
 
             write_verilog("end\n");
         }
-        context.code_generator.verilog.indentation_level -= 1;
+        context.verilog.indentation_level -= 1;
 
         write_verilog("endcase\n");
     }
@@ -260,7 +273,7 @@ generate_expression :: (expr: *Ast_Node) {
 }
 
 write_verilog :: (code: string, format: .. Any, do_indent := true) {
-    using context.code_generator;
+    verilog := *context.verilog;
 
     to_insert := tprint(code, .. format);
     lines := split(to_insert, "\n");

@@ -1,2 +1,4 @@
 modules/YosysVS.dll filter=lfs diff=lfs merge=lfs -text
 modules/yosys.dll filter=lfs diff=lfs merge=lfs -text
+modules/Yosys/yosys.dll filter=lfs diff=lfs merge=lfs -text
+modules/Yosys/yosys.lib filter=lfs diff=lfs merge=lfs -text
