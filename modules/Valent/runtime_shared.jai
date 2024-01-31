@@ -53,8 +53,8 @@ Ast_Jai_Code :: struct {
     node.kind = .JAI_CODE;
 
     block_type: enum {
-        GENERATE;
-        TESTBENCH;
+        STATIC;
+        SIMULATION;
     }
 
     code: string;
@@ -321,7 +321,7 @@ Token_Kind :: enum {
     KEYWORD_for;
     KEYWORD_if;
     KEYWORD_else;
-    KEYWORD_generate;
+    KEYWORD_jai;
     KEYWORD_switch;
     KEYWORD_case;
     KEYWORD_trunc;
@@ -337,10 +337,4 @@ Source_Location :: struct {
     line: int;
     start_char: int;
     end_char: int;
-}
-
-Generate_Block_User_Data :: struct {
-    parent_block: *Ast_Block;
-    num_emitted: int;
-    syntax_trees: [1000] *Ast_Node;
 }

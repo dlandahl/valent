@@ -177,10 +177,7 @@ parse :: (tokens: [] Token) -> *Ast_Block {
 
         s := parse_statement();
 
-        if s && s.kind == .JAI_CODE {
-            jai := cast(*Ast_Jai_Code) s;
-            generate_and_insert_ast(jai, *statements, top_level);
-        } else if s {
+        if s {
             check_statement_allowed_in_block(s);
             array_add(*statements, s);
         }
@@ -285,13 +282,13 @@ parse_statement :: () -> *Ast_Node {
         return comb;
     }
 
-    if allow(.KEYWORD_generate) {
+    if allow(.KEYWORD_jai) {
         braced := allow(.OPEN_BRACE);
 
         jai := Make_Ast(Ast_Jai_Code);
         expect(.JAI_CODE);
 
-        jai.block_type = .GENERATE;
+        jai.block_type = .STATIC;
         jai.code = current_token().string_value;
 
         if braced expect(.CLOSED_BRACE);
@@ -360,15 +357,10 @@ parse_block :: (block_type: Block_Type) -> *Ast_Block {
         s := parse_statement();
         if context.parser.error break;
 
-        if s.kind == .JAI_CODE {
-            jai := cast(*Ast_Jai_Code) s;
-            generate_and_insert_ast(jai, *statements, block);
-        } else {
-            check_statement_allowed_in_block(s);
-            if context.parser.error break;
+        check_statement_allowed_in_block(s);
+        if context.parser.error break;
 
-            array_add(*statements, s);
-        }
+        array_add(*statements, s);
 
         if !multi_line break;
     }
@@ -379,6 +371,7 @@ parse_block :: (block_type: Block_Type) -> *Ast_Block {
     return block;
 }
 
+/* This feature is not in the language anymore but this code might be useful to reference later
 #no_reset RUNTIME_DECLARATIONS :: #run read_entire_file("runtime_shared.jai");
 
 generate_and_insert_ast :: (jai: *Ast_Jai_Code, statements: *[..] *Ast_Node, parent: *Ast_Block) {
@@ -447,6 +440,7 @@ valent_get_parent_block :: () -> *Ast_Block {
     %2; // The user program
 }
 END;
+*/
 
 parse_declaration :: () -> *Ast_Declaration {
     ident := expect(.IDENTIFIER);
@@ -874,7 +868,7 @@ tokenize :: (source: string) -> [] Token {
         if token.kind == .ERROR break;
         if token.kind == .EOT   break;
 
-        if token.kind == .KEYWORD_generate {
+        if token.kind == .KEYWORD_jai {
 
             starts_with_brace := peek_token(*tokenizer).kind == .OPEN_BRACE;
             if starts_with_brace {
@@ -897,8 +891,8 @@ tokenize :: (source: string) -> [] Token {
                 if token.type == {
                     case #char "{"; brace_level += 1;
                     case #char "}"; brace_level -= 1;
-                    case .END_OF_INPUT; assert(false);
-                    case .ERROR; assert(false);
+                    case .END_OF_INPUT; assert(false); // Todo
+                    case .ERROR; assert(false); // Todo
                     case #char ";"; if !starts_with_brace && brace_level == 0 {
                         Jai.eat_token(*lexer);
                         break;
@@ -1207,7 +1201,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .KEYWORD_for;           return "Keyword 'for'";
       case .KEYWORD_if;            return "Keyword 'if'";
       case .KEYWORD_else;          return "Keyword 'else'";
-      case .KEYWORD_generate;      return "Keyword 'generate'";
+      case .KEYWORD_jai;           return "Keyword 'jai'";
       case .KEYWORD_switch;        return "Keyword 'switch'";
       case .KEYWORD_case;          return "Keyword 'case'";
       case .KEYWORD_trunc;         return "Keyword 'trunc'";

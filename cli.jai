@@ -11,6 +11,7 @@ Arguments :: struct {
     source: string;  @"?Specify the path of a Valent source code file"
     top: string;     @"?The name of the top module"
     backend: string; @"?Choose \"verilog\" or \"yosys\", or leave unset to only run typechecking"
+    output_format: string; @"?When using the yosys backend, you can specify \"verilog\", \"blif\" (default), edif, or \"rtlil\""
 }
 
 main :: () {
@@ -35,7 +36,9 @@ main :: () {
         return;
     }
 
-    program := Valent.compile(code);
+    program, compile_success := Valent.compile(code);
+
+    if !compile_success return;
 
     if to_lower_copy_new(args.backend) == {
       case "verilog";
@@ -45,7 +48,25 @@ main :: () {
             return;
         }
 
-      case "yosys"; // To do
+      case "yosys";
+        found_top := Valent.create_rtlil_design(program, args.top);
+        if !found_top {
+            log_error("Could not find top module '%'\n", args.top);
+            return;
+        }
+
+        Valent.run_yosys_command("proc; opt");
+        if args.output_format == {
+            case ""; #through;
+            case "blif"; Valent.run_yosys_command("write_blif");
+            case "edif"; Valent.run_yosys_command("write_edif");
+            case "verilog"; Valent.run_yosys_command("write_verilog");
+            case "rtlil"; Valent.run_yosys_command("dump");
+            case;
+            log_error("Specified output format is not valid: '%'", args.output_format);
+            return;
+        }
+
       case ""; // We already typechecked
       case; log_error("'%' is not a valid backend", args.backend);
     }

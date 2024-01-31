@@ -180,7 +180,9 @@ typecheck_block :: (block: *Ast_Block) {
             comb := cast(*Ast_Combinational_Circuit) it;
             typecheck_block(comb.block);
 
-          case .JAI_CODE; // Todo
+          case .JAI_CODE;
+            jai := cast(*Ast_Jai_Code) it;
+            print("Found Jai code %\n", jai.code);
           case;
             assert(false);
         }
