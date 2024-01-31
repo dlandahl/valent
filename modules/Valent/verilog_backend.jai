@@ -232,6 +232,11 @@ generate_expression :: (expr: *Ast_Node) {
             } else {
                 assert(false);
             }
+        } else if op.operation == .OPERATOR_REPEAT {
+            count := evaluate_constant_expression(op.left);
+            write_verilog("{%{ ", count);
+            generate_expression(op.right);
+            write_verilog(" }}");
         } else {
             info := get_operator_info(op.operation);
 

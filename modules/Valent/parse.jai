@@ -123,7 +123,7 @@ stringify_statement :: (ast: *Ast_Node) -> string {
 }
 
 operator_info :: Binary_Operator_Info.[
-    .{ .OPERATOR_DOT,              "",   "",           12 },
+    .{ .OPERATOR_DOT,              "",   "",           13 },
     .{ .OPERATOR_ADD,              "+",  "$add",       10 },
     .{ .OPERATOR_SUBTRACT,         "-",  "$sub",       10 },
     .{ .OPERATOR_MULTIPLY,         "*","  $mul",       11 },
@@ -142,6 +142,7 @@ operator_info :: Binary_Operator_Info.[
     .{ .OPERATOR_LOGICAL_AND,      "&&", "$logic_and", 2  },
     .{ .OPERATOR_SHIFT_LEFT,       "<<", "$shl",       9  },
     .{ .OPERATOR_SHIFT_RIGHT,      ">>", "$shr",       9  },
+    .{ .OPERATOR_REPEAT,           "",   "",           12 },
 ];
 
 Binary_Operator_Info :: struct {
@@ -220,7 +221,7 @@ parse_statement :: () -> *Ast_Node {
     if peek(.OPEN_BRACE) return parse_assignment(); // Left hand side concatenation
 
     if peek(.IDENTIFIER) {
-        if peek(.COLON, .DOUBLE_COLON, distance = 2) {
+        if peek(.COLON, distance = 2) {
             decl := parse_declaration();
 
             if current_token().kind != .CLOSED_BRACE && current_token().kind != .SEMICOLON {
@@ -448,14 +449,20 @@ parse_declaration :: () -> *Ast_Declaration {
     decl := Make_Ast(Ast_Declaration);
     decl.name = ident.string_value;
 
-    if allow(.DOUBLE_COLON) {
-        is_type := peek_type();
+    expect(.COLON);
+
+    if !allow(.COLON) {
+        decl.type_expression = parse_expression();
+
+        if allow(.COLON) {
+            decl.datatype.is_type = peek_type();
+            decl.initialisation_value = parse_expression();
+            decl.constant = true;
+        }
+    } else {
+        decl.datatype.is_type = peek_type();
         decl.initialisation_value = parse_expression();
         decl.constant = true;
-        decl.datatype.is_type = is_type;
-    } else if allow(.COLON) {
-        decl.type_expression = parse_expression();
-        decl.constant = false;
     }
 
     return decl;
@@ -609,7 +616,8 @@ parse_enum :: () -> *Ast_Enum {
         new := array_add(*fields);
         new.name = expect(.IDENTIFIER).string_value;
 
-        if allow(.DOUBLE_COLON) {
+        if allow(.COLON) {
+            expect(.COLON);
             new.value_expr = parse_expression();
         }
 
@@ -975,6 +983,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
       case #char "."; Emit(.OPERATOR_DOT);
       case #char "+"; Emit(.OPERATOR_ADD);
       case #char ";"; Emit(.SEMICOLON);
+      case #char "#"; Emit(.OPERATOR_REPEAT);
       case #char "*"; Emit(.OPERATOR_MULTIPLY);
       case #char "("; Emit(.OPEN_PAREN);
       case #char ")"; Emit(.CLOSED_PAREN);
@@ -985,6 +994,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
       case #char "%"; Emit(.OPERATOR_MODULO);
       case #char "^"; Emit(.OPERATOR_BIT_XOR);
       case #char "~"; Emit(.TILDE);
+      case #char ":"; Emit(.COLON);
 
       case #char "|";
         cursor += 1;
@@ -1008,14 +1018,6 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
         else {
             cursor -= 1;
             Emit(.OPERATOR_BIT_AND);
-        }
-
-      case #char ":";
-        cursor += 1;
-        if current() == #char ":"  Emit(.DOUBLE_COLON);
-        else {
-            cursor -= 1;
-            Emit(.COLON);
         }
 
       case #char "-";
@@ -1186,10 +1188,10 @@ stringify_token :: (token: Token_Kind) -> string {
       case .CLOSED_BRACKET;        return "Closed Bracket (])";
       case .OPEN_BRACE;            return "Open Brace ({)";
       case .CLOSED_BRACE;          return "Closed Brace (})";
-      case .DOUBLE_COLON;          return "Double Colon (::)";
       case .OPERATOR_EQUALS;       return "Double Equals (==)";
       case .OPERATOR_LOGICAL_OR;   return "Logical Or (||)";
       case .ARROW;                 return "Arrow (->)";
+      case .OPERATOR_REPEAT;                 return "Pound (#)";
       case .IDENTIFIER;            return "Identifier";
       case .INTEGER;               return "Integer";
       case .KEYWORD_module;        return "Keyword 'module'";

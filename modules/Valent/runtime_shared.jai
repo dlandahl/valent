@@ -286,6 +286,7 @@ Token_Kind :: enum {
     OPERATOR_SHIFT_LEFT;
     OPERATOR_SHIFT_RIGHT;
     OPERATOR_DOT;
+    OPERATOR_REPEAT;
     _END_OPERATORS;
 
     COLON;
@@ -302,7 +303,6 @@ Token_Kind :: enum {
     CLOSED_BRACE;
 
     ARROW;
-    DOUBLE_COLON;
 
     IDENTIFIER;
     INTEGER;

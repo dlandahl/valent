@@ -171,10 +171,16 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
             left := generate_expression(op.left);
             return rtlil_bit_select(left, cast(s32) start, cast(s32) end);
 
+        } else if op.operation == .OPERATOR_REPEAT {
+            count := evaluate_constant_expression(op.left);
+            right := generate_expression(op.right);
+            return rtlil_replicate_signal(right, cast(s32) count);
+
         } else if op.operation == .OPERATOR_DOT {
             if op.left.datatype.primitive == .ENUM {
                 value := evaluate_constant_expression(op);
                 return rtlil_constant(xx value, 32);
+
             } else if op.left.datatype.register_def {
                 reg := op.left.datatype.register_def;
                 ident := cast(*Ast_Identifier) op.right;

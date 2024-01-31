@@ -296,12 +296,20 @@ typecheck_expression :: (expr: *Ast_Node) {
             typecheck_expression(op.right);
             op.datatype = op.left.datatype;
 
-            if op.operation != .OPEN_BRACKET {
+            if op.operation == .OPERATOR_REPEAT {
+                op.datatype = op.right.datatype;
+                count := evaluate_constant_expression(op.left);
+                op.datatype.bit_width *= count;
+            } else if op.operation != .OPEN_BRACKET {
                 op.datatype.bit_width = max(op.left.datatype.bit_width, op.right.datatype.bit_width);
 
-                if op.operation == .OPERATOR_ADD       op.datatype.bit_width += 1;
-                if op.operation == .OPERATOR_MULTIPLY  op.datatype.bit_width *= 2;
-                if op.operation == .OPERATOR_EQUALS    op.datatype.bit_width = 1;
+                if op.operation == .OPERATOR_ADD              op.datatype.bit_width += 1;
+                if op.operation == .OPERATOR_MULTIPLY         op.datatype.bit_width *= 2;
+                if op.operation == .OPERATOR_EQUALS           op.datatype.bit_width = 1;
+                if op.operation == .OPERATOR_LESS_THAN        op.datatype.bit_width = 1;
+                if op.operation == .OPERATOR_GREATER_OR_EQUAL op.datatype.bit_width = 1;
+                if op.operation == .OPERATOR_LESS_OR_EQUAL    op.datatype.bit_width = 1;
+                if op.operation == .OPERATOR_GREATER_THAN     op.datatype.bit_width = 1;
 
             } else {
                 if op.right.kind == .BIT_SELECT {

@@ -26,3 +26,4 @@ rtlil_add_root_action      :: (process: *Rtlil_Process, lhs: *Rtlil_Signal, rhs:
 rtlil_add_sync_action      :: (process: *Rtlil_Process, lhs: *Rtlil_Signal, rhs: *Rtlil_Signal) #foreign yosys;
 rtlil_concatenate_signals  :: (signals: **Rtlil_Signal, count: s32) -> *Rtlil_Signal #foreign yosys;
 rtlil_bit_select           :: (source: *Rtlil_Signal, start: s32, end: s32) -> *Rtlil_Signal #foreign yosys;
+rtlil_replicate_signal     :: (source: *Rtlil_Signal, count: s32) -> *Rtlil_Signal #foreign yosys;

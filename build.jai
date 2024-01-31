@@ -30,6 +30,6 @@
         bo.output_executable_name = "valent";
         set_build_options(bo, sb);
 
-        add_build_file("sandbox.jai", wb);
+        add_build_file("sandbox.jai", sb);
     }
 }

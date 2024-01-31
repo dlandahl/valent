@@ -65,7 +65,9 @@ extern "C" {
         RTLIL::SigSpec _right  = *(RTLIL::SigSpec *)right;
         RTLIL::SigSpec _left   = *(RTLIL::SigSpec *)left;
 
-        _module->connect(RTLIL::SigSig(_left, _right));
+        auto sigsig = RTLIL::SigSig(_left, _right);
+        printf("First size %d second size %d", GetSize(sigsig.first), GetSize(sigsig.second));
+        _module->connect(sigsig);
     }
 
     __declspec(dllexport) RTLIL_Signal *rtlil_add_binary_cell(RTLIL_Module *module, const char *type, RTLIL_Signal *left, RTLIL_Signal *right, int width, int line_number) {
@@ -184,5 +186,15 @@ extern "C" {
         }
 
         return result;
+    }
+
+    __declspec(dllexport) RTLIL_Signal *rtlil_replicate_signal(RTLIL_Signal *signal, int count) {
+        RTLIL::SigSpec *result = new RTLIL::SigSpec;
+
+        for (int i = 0; i < count; i++) {
+            result->append(signal);
+        }
+
+        return (RTLIL_Signal *)result;
     }
 }
