@@ -1,10 +1,4 @@
 
-// jai {
-//     width_of :: (obj: *Valent_Object) -> Valent_Constant {
-//         return obj.bit_width;
-//     }
-// }
-
 Uart_Tx_Ctrl :: module (
     clock: wire,
     send: wire,
@@ -65,7 +59,7 @@ Uart_Tx_Ctrl :: module (
 
 
     // Track which bit of tx_data should currently be sent
-    BIT_INDEX_MAX :: 10; // width_of(Uart_Frame);
+    BIT_INDEX_MAX :: 10;
     bit_index: flipflop[4];
 
     sequential (clock) {

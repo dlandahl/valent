@@ -77,31 +77,30 @@ generate_circuit_block :: (block: *Ast_Block, process: *Rtlil_Process, parent: *
             source := generate_expression(ass.expr);
             target := generate_expression(ass.target);
 
-            if block.block_type == .SEQUENTIAL {
-                // Todo: sequential assignments need to know the name of the target, so concats need to be split into separate assignments
-
-                ident := cast(*Ast_Identifier) ass.target;
-                next_name := to_c_string(tprint("$%_next", ident.name));
-                next := rtlil_signal_by_name(current_module, next_name);
-
-                already_exists := next != null;
-
-                if !already_exists {
-                    next = rtlil_add_wire(current_module, next_name, xx ass.target.datatype.bit_width);
-                    rtlil_add_sync_action(process, target, next);
-                }
-
-                if !parent {
-                    rtlil_connect(current_module, next, source);
-                } else {
-                    if !already_exists {
-                        rtlil_add_root_action(process, next, target);
-                    }
-
-                    rtlil_add_action(parent, next, source);
-                }
-            } else {
+            if block.block_type == .COMBINATIONAL {
                 rtlil_add_action(parent, target, source);
+                return;
+            }
+
+            ident := cast(*Ast_Identifier) ass.target;
+            next_name := to_c_string(tprint("$%_next", ident.name));
+            next := rtlil_signal_by_name(current_module, next_name);
+
+            already_exists := next != null;
+
+            if !already_exists {
+                next = rtlil_add_wire(current_module, next_name, xx ass.target.datatype.bit_width);
+                rtlil_add_sync_action(process, target, next);
+            }
+
+            if !parent {
+                rtlil_connect(current_module, next, source);
+            } else {
+                if !already_exists {
+                    rtlil_add_root_action(process, next, target);
+                }
+
+                rtlil_add_action(parent, next, source);
             }
         }
 
@@ -212,11 +211,7 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
             info := get_operator_info(op.operation);
             cell_type := to_c_string(info.rtlil_cell_type);
 
-            width := max(op.left.datatype.bit_width, op.right.datatype.bit_width);
-            if op.operation == .OPERATOR_ADD      width += 1;
-            if op.operation == .OPERATOR_MULTIPLY width *= 2;
-
-            result := rtlil_add_binary_cell(current_module, cell_type, left, right, width, op.location.line);
+            result := rtlil_add_binary_cell(current_module, cell_type, left, right, op.datatype.bit_width, op.location.line);
             return result;
         }
 

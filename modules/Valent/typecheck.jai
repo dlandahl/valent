@@ -108,6 +108,7 @@ typecheck_block :: (block: *Ast_Block) {
                 case; assert(false);
             }
 
+            /*
             lhs_type: Datatype;
             if ass.target.kind == .IDENTIFIER {
                 ident := cast(*Ast_Identifier) ass.target;
@@ -120,30 +121,40 @@ typecheck_block :: (block: *Ast_Block) {
                 // Todo: check this is only 0/Z literals and wire or flipflop idents depending on block type
                 lhs_type = ass.target.datatype;
             }
+            */
+
+            typecheck_expression(ass.target);
+
+            Walk_Expression(ass.target, #code {
+                if expr.kind == .LITERAL {
+                    lit := cast(*Ast_Literal) expr;
+                    if lit.int_value != 0 semantic_error(lit, "Literals in lvalue concatenations must be zero - they only align the writable elements.\n\n%", node_location_string(lit));
+                }
+            });
 
             typecheck_expression(ass.expr);
 
             if block.block_type == .SEQUENTIAL && ass.target.datatype.primitive != .FLIPFLOP {
-                semantic_error(ass, "sequential blocks may only contain assignments to clocked elements (flipflops)\n\n%", node_location_string(ass));
+                semantic_error(ass, "Sequential blocks may only contain assignments to clocked elements (flipflops)\n\n%", node_location_string(ass));
             }
 
             if block.block_type == .COMBINATIONAL && ass.target.datatype.primitive != .WIRE {
-                semantic_error(ass, "combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
+                semantic_error(ass, "Combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
             }
 
-            if lhs_type.module_input {
-                semantic_error(ass, "a module input parameter must not be the target of an assignment\n\n%", node_location_string(ass.target));
+            if ass.target.datatype.module_input {
+                semantic_error(ass, "A module input parameter must not be the target of an assignment\n\n%", node_location_string(ass.target));
             }
 
-            if lhs_type.enum_def {
-                if ass.expr.datatype.enum_def != lhs_type.enum_def {
+            if ass.target.datatype.enum_def {
+                if ass.expr.datatype.enum_def != ass.target.datatype.enum_def {
                     semantic_error(ass, "In this assignment, the left side has an enum tag, but the right side is not a member of that enum\n\n%", node_location_string(ass));
                 }
             }
 
-            if ass.trunc && lhs_type.bit_width < ass.expr.datatype.bit_width {
+            if ass.trunc && ass.target.datatype.bit_width < ass.expr.datatype.bit_width {
             } else {
-                check_bit_width(ass, lhs_type, ass.expr.datatype);
+                check_bit_width(ass, ass.target.datatype, ass.expr.datatype);
             }
 
           case .IF;
@@ -338,7 +349,7 @@ typecheck_expression :: (expr: *Ast_Node) {
             typecheck_expression(it);
 
             if it.datatype.bit_width == -1 {
-                semantic_error(cat, "all entries of a concatenation must have an explicit width, but this one doesn't\n\n%", node_location_string(it));
+                semantic_error(cat, "All entries of a concatenation must have an explicit width, but this one doesn't\n\n%", node_location_string(it));
             }
             bit_width += it.datatype.bit_width;
 
@@ -353,7 +364,6 @@ typecheck_expression :: (expr: *Ast_Node) {
         if !any_flipflops && any_wires cat.datatype.primitive = .WIRE;
 
       case .MODULE;
-        print("Found module\n");
         mod := cast(*Ast_Module) expr;
         typecheck_module(mod);
     }
@@ -658,13 +668,47 @@ resolve_identifier :: (id: *Ast_Identifier) {
 
     decl := search_in_block(context.typechecker.current_block, id.name);
     if !decl {
-        semantic_error(id, "Could not find declaration when trying to resolve identifier '%', referenced here:\n\n%", id.name, node_location_string(id));
+        semantic_error(id, "Undeclared identifier '%', referenced here:\n\n%", id.name, node_location_string(id));
     }
 
     typecheck_declaration(decl);
     id.datatype = decl.datatype;
 
     id.resolved_declaration = decl;
+}
+
+Walk_Expression :: (expr: *Ast_Node, $code: Code, $deferred: Code = #code {}, user_data: *$T = null) {
+
+    #insert,scope() code;
+
+    if expr.kind == {
+      case .MODULE;
+      case .BIT_SELECT;
+        sel := cast(*Ast_Bit_Select) expr;
+        Walk_Expression(sel.left, code, deferred, user_data);
+        Walk_Expression(sel.right, code, deferred, user_data);
+
+      case .LITERAL;
+      case .IDENTIFIER;
+      case .UNARY_OP;
+        op := cast(*Ast_Unary_Op) expr;
+        Walk_Expression(op.argument, code, deferred, user_data);
+
+      case .BINARY_OP;
+        op := cast(*Ast_Binary_Op) expr;
+        Walk_Expression(op.left, code, deferred, user_data);
+        Walk_Expression(op.right, code, deferred, user_data);
+
+      case .CONCAT;
+        cat := cast(*Ast_Concat) expr;
+        for cat.fields {
+            Walk_Expression(it, code, deferred, user_data);
+        }
+
+      case; assert(false);
+    }
+
+    #insert,scope() deferred;
 }
 
 semantic_error :: (ast: *Ast_Node, report: string, format: .. Any) {
