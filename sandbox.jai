@@ -26,11 +26,12 @@
 
 TEST_PROGRAM :: #string END
 
-Top :: module (clock: wire, in: wire) {
-    thing: flipflop;
-    sequential (clock) {
-        { 1'b0, thing } <= 2 # in;
-    }
+Top :: module (clock: wire, a: wire) -> out: wire {
+    inv: Inverter(a, a) -> out;
+}
+
+Inverter :: module (in: wire) -> out: wire {
+    combinational { out = !in; }
 }
 
 END;

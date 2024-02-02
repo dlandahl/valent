@@ -50,10 +50,14 @@ typecheck_module :: (module: *Ast_Module) {
     }
 
     typecheck_block(cast(*Ast_Block) module);
+
+    module.datatype.primitive = .MODULE;
+    module.datatype.is_type = true;
 }
 
 Typechecker :: struct {
     current_block: *Ast_Block;
+    block_stack: [..] *Ast_Block;
     in_progress: [..] *Ast_Node;
 }
 
@@ -82,8 +86,17 @@ typecheck_block :: (block: *Ast_Block) {
         for module.outputs             Duplication_Check(it);
     }
 
-    context.typechecker.current_block = block;
-    defer context.typechecker.current_block = block.parent;
+    using context.typechecker;
+    array_add(*block_stack, block);
+    current_block = block;
+
+    defer {
+        pop(*block_stack);
+        
+        if block_stack.count {
+            current_block = block_stack[block_stack.count-1];
+        }
+    }
 
     for block.statements {
         if it.kind == {
@@ -366,6 +379,44 @@ typecheck_expression :: (expr: *Ast_Node) {
       case .MODULE;
         mod := cast(*Ast_Module) expr;
         typecheck_module(mod);
+
+      case; assert(false);
+    }
+}
+
+typecheck_module_instantiation :: (module: *Ast_Module_Inst) {
+    resolve_identifier(module.ident);
+
+    if module.ident.datatype.primitive != .MODULE {
+        print("%\n", module.ident.datatype);
+        semantic_error(module, "The name in this module instantiation does not refer to a module:\n\n%", node_location_string(module));
+    }
+
+    decl := cast(*Ast_Module) module.ident.resolved_declaration.initialisation_value;
+    assert(decl.kind == .MODULE);
+
+    if module.inputs.count != decl.inputs.count {
+        semantic_error(module, "Module '%' expects % inputs, but % are provided here:\n\n%\n\nDeclared here:\n\n%", module.ident.name, decl.inputs.count, module.inputs.count, node_location_string(module), node_location_string(decl));
+    }
+
+    if module.outputs.count != decl.outputs.count {
+        semantic_error(module, "Module '%' expects % outputs, but % are provided here:\n\n%\n\nDeclared here:\n\n%", module.ident.name, decl.outputs.count, module.outputs.count, node_location_string(module), node_location_string(decl));
+    }
+
+    for *module.inputs {
+        resolve_identifier(it);
+
+        if it.datatype.primitive != .WIRE {
+            semantic_error(it, "Each input to a module instance must be a wire.\n\n%", node_location_string(it));
+        }
+    }
+
+    for *module.outputs {
+        resolve_identifier(it);
+
+        if it.datatype.primitive != .WIRE {
+            semantic_error(it, "Each output to a module instance must be a wire.\n\n%", node_location_string(it));
+        }
     }
 }
 
@@ -545,6 +596,9 @@ evaluate_type_expression :: (expr: *Ast_Node) {
     } else if expr.kind == .MODULE {
         typecheck_module(cast(*Ast_Module) expr);
         return;
+    } else if expr.kind == .MODULE_INSTANTIATION {
+        typecheck_module_instantiation(cast(*Ast_Module_Inst) expr);
+        return;
     } else {
         expr.datatype.bit_width = 1;
     }
@@ -633,7 +687,7 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
         }
 
         assert(false);
-        semantic_error(expr, "Tried to constant-evaluate an expression \n\n%\n", node_location_string(expr));
+        semantic_error(expr, "Expected a constant expression, but this can't be constant-evaluated:\n\n%\n", node_location_string(expr));
         return 0;
     }
 

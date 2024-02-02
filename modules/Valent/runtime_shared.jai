@@ -9,6 +9,7 @@ Ast_Node :: struct {
         UNARY_OP;
         LITERAL;
         MODULE;
+        MODULE_INSTANTIATION;
         ENUM;
         REGISTER;
         SEQUENTIAL_CIRCUIT;
@@ -150,6 +151,16 @@ Ast_Module :: struct {
     constant_parameters: [] *Ast_Declaration;
     inputs: [] *Ast_Declaration;
     outputs: [] *Ast_Declaration;
+}
+
+Ast_Module_Inst :: struct {
+    using #as node: Ast_Node;
+    node.kind = .MODULE_INSTANTIATION;
+
+    ident: *Ast_Identifier;
+
+    inputs: [..] Ast_Identifier;
+    outputs: [..] Ast_Identifier;
 }
 
 Ast_Enum :: struct {

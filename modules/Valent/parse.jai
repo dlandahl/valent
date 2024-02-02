@@ -1,6 +1,17 @@
 
 #scope_module
 
+assert :: (arg: bool, message := "", args: .. Any, loc := #caller_location) #no_debug #expand {
+    if !arg {
+        if context.typechecker.current_block {
+            print("\n(In block): %\n", node_location_string(context.typechecker.current_block));
+        }
+
+        assert_helper(message, ..args, loc);
+        debug_break();
+    }
+}
+
 Parser :: struct {
     tokens: [] Token;
     token_index: int;
@@ -529,6 +540,39 @@ parse_atom :: () -> *Ast_Node {
     if allow(.IDENTIFIER) {
         ident := Make_Ast(Ast_Identifier);
         ident.name = current_token().string_value;
+
+        if peek(.OPEN_PAREN) {
+            module := Make_Ast(Ast_Module_Inst);
+            module.ident = ident;
+
+            expect(.OPEN_PAREN);
+
+            while allow(.IDENTIFIER) {
+                ident := array_add(*module.inputs);
+                ident.*.name = current_token().string_value;
+                ident.*.location = current_token().location;
+                if !allow(.COMMA) break;
+            }
+
+            expect(.CLOSED_PAREN);
+
+            if allow(.ARROW) {
+                started_with_paren := allow(.OPEN_PAREN);
+
+                while allow(.IDENTIFIER) {
+                    ident := array_add(*module.outputs);
+                    ident.*.name = current_token().string_value;
+                    ident.*.location = current_token().location;
+                    if !allow(.COMMA) break;
+                }
+
+                if started_with_paren {
+                    expect(.CLOSED_PAREN);
+                }
+            }
+
+            return module;
+        }
 
         atom = ident;
     }
