@@ -12,6 +12,7 @@ Ast_Node :: struct {
         MODULE_INSTANTIATION;
         ENUM;
         REGISTER;
+        MEMORY;
         SEQUENTIAL_CIRCUIT;
         COMBINATIONAL_CIRCUIT;
         ASSIGNMENT;
@@ -163,6 +164,14 @@ Ast_Module_Inst :: struct {
     outputs: [..] Ast_Identifier;
 }
 
+Ast_Memory :: struct {
+    using #as node: Ast_Node;
+    node.kind = .MEMORY;
+
+    depth_expression: *Ast_Node; // Bytes
+    width_expression: *Ast_Node; // Bits per byte
+}
+
 Ast_Enum :: struct {
     using #as node: Ast_Node;
     node.kind = .ENUM;
@@ -229,12 +238,15 @@ Datatype :: struct {
         MODULE;
         ENUM;
         REGISTER;
+        MEMORY;
         _COUNT;
     }
 
     primitive: Primitive;
     bit_width: int; // -1 means constant with no specific width
-    module_input: bool;
+    memory_depth: int;
+
+    module_input: bool; // In the future we could detect this when we build the net and remove this bool (it's used only for checking if this type can be an lvalue)
     is_type: bool;
 
     enum_def: *Enum_Def;
@@ -322,6 +334,7 @@ Token_Kind :: enum {
     KEYWORD_module;
     KEYWORD_enum;
     KEYWORD_register;
+    KEYWORD_memory;
     KEYWORD_combinational;
     KEYWORD_sequential;
     // KEYWORD_constant;

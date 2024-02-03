@@ -29,8 +29,21 @@
 
 TEST_PROGRAM :: #string END
 
-Top :: module (clock: wire, a: wire) -> out: wire {
-    inv: Inverter(a) -> out;
+Hamming :: register {
+    data[11];
+    parity[4];
+}
+
+Test :: enum [11] {
+    a; b; c; d; e; f; g; h; i;
+}
+
+Top :: module (clock: wire, index: wire[9]) -> out: flipflop[Test] {
+    ram: [512] memory[Test];
+
+    sequential (clock) {
+        out <= ram[index];
+    }
 }
 
 Inverter :: module (in: wire) -> out: wire {
