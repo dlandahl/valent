@@ -20,10 +20,11 @@
     // run_yosys_command("dump");
     // return;
 
+    // uart := read_entire_file("examples/uart.valent");
     p, success := compile(TEST_PROGRAM);
     if !success return;
 
-    generate_verilog(p, "Top");
+    if !generate_verilog(p, "Top") print("Top is wrong\n");
     #if OS != .LINUX create_rtlil_design(p, "Top");
 }
 
@@ -35,7 +36,7 @@ Hamming :: register {
 }
 
 Test :: enum [11] {
-    a; b; c; d; e; f; g; h; i;
+    a; b; c; d; a; f; g; h; i;
 }
 
 Top :: module (clock: wire, index: wire[9]) -> out: flipflop[Test] {

@@ -1,42 +1,42 @@
 
 Opcode :: enum[7] {
-    auipc  :: b00_101_11;
-    lui    :: b01_101_11;
-    load   :: b00_000_11;
-    store  :: b01_000_11;
-    op_imm :: b00_100_11;
-    op     :: b01_100_11;
-    branch :: b11_000_11;
-    jalr   :: b11_001_11;
-    jal    :: b11_011_11;
+    auipc  :: 'b00_101_11;
+    lui    :: 'b01_101_11;
+    load   :: 'b00_000_11;
+    store  :: 'b01_000_11;
+    op_imm :: 'b00_100_11;
+    op     :: 'b01_100_11;
+    branch :: 'b11_000_11;
+    jalr   :: 'b11_001_11;
+    jal    :: 'b11_011_11;
 }
 
 Funct :: enum[3] {
-    op_add_sub  :: b000;
-    op_sll      :: b001;
-    op_slt      :: b010;
-    op_sltu     :: b011;
-    op_xor      :: b100;
-    op_srl_sra  :: b101;
-    op_or       :: b110;
-    op_and      :: b111;
+    op_add_sub  :: 'b000;
+    op_sll      :: 'b001;
+    op_slt      :: 'b010;
+    op_sltu     :: 'b011;
+    op_xor      :: 'b100;
+    op_srl_sra  :: 'b101;
+    op_or       :: 'b110;
+    op_and      :: 'b111;
 
-    branch_beq  :: b000;
-    branch_bne  :: b001;
-    branch_blt  :: b010;
-    branch_bge  :: b011;
-    branch_bltu :: b100;
-    branch_bgeu :: b101;
+    branch_beq  :: 'b000;
+    branch_bne  :: 'b001;
+    branch_blt  :: 'b010;
+    branch_bge  :: 'b011;
+    branch_bltu :: 'b100;
+    branch_bgeu :: 'b101;
 
-    load_lb     :: b000;
-    load_lh     :: b001;
-    load_lw     :: b010;
-    load_lbu    :: b100;
-    load_lhu    :: b101;
+    load_lb     :: 'b000;
+    load_lh     :: 'b001;
+    load_lw     :: 'b010;
+    load_lbu    :: 'b100;
+    load_lhu    :: 'b101;
 
-    store_sb    :: b000;
-    store_sh    :: b001;
-    store_sw    :: b010;
+    store_sb    :: 'b000;
+    store_sh    :: 'b001;
+    store_sw    :: 'b010;
 }
 
 Risc :: module (clock: wire, reset: wire) {
@@ -59,7 +59,7 @@ Risc :: module (clock: wire, reset: wire) {
         }
     }
 
-    RiscV_Inst :: register[32] {
+    RiscV_Instruction :: register[32] {
         opcode    [Opcode];
         dest_reg  [5];
         funct     [Funct];
@@ -68,15 +68,21 @@ Risc :: module (clock: wire, reset: wire) {
         immediate [7];
     }
 
-    generate for 1..10 insert("stage[%1] <=,trunc stage[%1] + 1;", it);
+    curr_inst: flipflop[RiscV_Instruction];
 
-    curr_inst: flipflop[RiscV_Inst];
-    ram: Block_Ram(clock);
+
+    wr_en: wire[4];
+    address: wire[32];
+    data_in: wire[32];
+    data_out: wire[32];
+
+    ram: Block_Ram(clock, wr_en, address, data_in) -> data_out;
+
 
     sequential (clock) {
         switch stage {
           case Exec_Stage.FETCH:
-            curr_inst <= cast(RiscV_Inst) ram.data_out;
+            curr_inst <= ram.data_out;
 
           case Exec_Stage.DECODE:
             curr_inst <= ram.data_out;
@@ -93,11 +99,7 @@ Block_Ram :: module (
     data_out: flipflop[32]
   ) {
 
-    bram: memory[32] [0'h400];
-
-    generate {
-        init_memory_from_file("bram", "program.mem");
-    }
+    bram: ['h400] memory[32];
 
     sequential (clock) {
         if wr_en[0]  memory[address][7:0]   <= data_in[7:0];
