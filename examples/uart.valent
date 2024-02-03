@@ -75,7 +75,7 @@ Uart_Tx_Ctrl :: module (
 
     baud_timer: flipflop[14];
     baud_done: wire;
-    combinational baud_done = (baud_timer == BAUD_TIMER_MAX)[0];
+    combinational baud_done = baud_timer == BAUD_TIMER_MAX;
 
     sequential (clock) {
         if tx_state == Tx_State.RDY || baud_done {

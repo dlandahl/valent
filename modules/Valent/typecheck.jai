@@ -477,6 +477,10 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
     array_add(*context.typechecker.in_progress, decl);
     defer pop(*context.typechecker.in_progress);
 
+    if decl.initialisation_value && decl.type_expression {
+        semantic_error(decl, "Currently, you may only write declarations with either a type, or a value from which to infer the type, not both. (Work in progress)\n\n%", node_location_string(decl));
+    }
+
     if decl.initialisation_value && decl.datatype.is_type {
         evaluate_type_expression(decl.initialisation_value);
         decl.datatype = decl.initialisation_value.datatype;
@@ -493,7 +497,7 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
     prim := decl.datatype.primitive;
     if prim == .CONSTANT || (prim == .MODULE && decl.datatype.is_type) || prim == .ENUM {
         if !decl.constant {
-            semantic_error(decl, "declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%", prim, node_location_string(decl)); // Todo: stringify type name
+            semantic_error(decl, "Declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%", prim, node_location_string(decl)); // Todo: stringify type name
         }
     }
 

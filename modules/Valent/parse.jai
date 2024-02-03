@@ -1258,7 +1258,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .OPERATOR_EQUALS;       return "Double Equals (==)";
       case .OPERATOR_LOGICAL_OR;   return "Logical Or (||)";
       case .ARROW;                 return "Arrow (->)";
-      case .OPERATOR_REPEAT;                 return "Pound (#)";
+      case .OPERATOR_REPEAT;       return "Pound (#)";
       case .IDENTIFIER;            return "Identifier";
       case .INTEGER;               return "Integer";
       case .KEYWORD_module;        return "Keyword 'module'";
@@ -1282,7 +1282,7 @@ stringify_token :: (token: Token_Kind) -> string {
 
       case;
         assert(false, tprint("Tried to stringify token %\n", token));
-        return "";
+        return tprint("%", token);
     }
 }
 
