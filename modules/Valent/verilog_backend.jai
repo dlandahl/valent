@@ -53,9 +53,38 @@ generate_module :: (decl: *Ast_Declaration) {
 
     context.verilog.indentation_level += 1;
     for module.statements {
-        if it.kind == .DECLARATION {
-            generate_statement(it);
+        if it.kind != .DECLARATION continue;
+
+        decl := cast(*Ast_Declaration) it;
+        if decl.type_expression && decl.type_expression.kind == .MODULE_INSTANTIATION continue;
+
+        generate_statement(it);
+    }
+
+    for module.statements {
+        if it.kind != .DECLARATION continue;
+
+        decl := cast(*Ast_Declaration) it;
+        if decl.type_expression && decl.type_expression.kind != .MODULE_INSTANTIATION continue;
+        
+        instance := cast(*Ast_Module_Inst) decl.type_expression;
+        source := cast(*Ast_Declaration) instance.ident.resolved_declaration;
+
+        write_verilog("% %(", instance.ident.name, decl.name);
+
+        for instance.inputs {
+            write_verilog(it.name);
+            if it_index != instance.inputs.count-1 || instance.outputs.count {
+                write_verilog(", ");
+            }
         }
+
+        for instance.outputs {
+            write_verilog(it.name);
+            if it_index != instance.outputs.count-1 write_verilog(", ");
+        }
+
+        write_verilog(");\n");
     }
 
     for module.statements {

@@ -458,7 +458,7 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
     decl.datatype.module_input = decl.module_input;
 
     prim := decl.datatype.primitive;
-    if prim == .CONSTANT || prim == .MODULE || prim == .ENUM {
+    if prim == .CONSTANT || (prim == .MODULE && decl.datatype.is_type) || prim == .ENUM {
         if !decl.constant {
             semantic_error(decl, "declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%", prim, node_location_string(decl)); // Todo: stringify type name
         }
@@ -598,6 +598,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         return;
     } else if expr.kind == .MODULE_INSTANTIATION {
         typecheck_module_instantiation(cast(*Ast_Module_Inst) expr);
+        expr.datatype.primitive = .MODULE;
         return;
     } else {
         expr.datatype.bit_width = 1;
