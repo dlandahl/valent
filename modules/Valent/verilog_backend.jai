@@ -105,6 +105,7 @@ generate_statement :: (stmt: *Ast_Node) {
         t := decl.datatype;
 
         if      t.primitive == .FLIPFLOP write_verilog("reg ");
+        else if t.primitive == .MEMORY   write_verilog("reg ");
         else if t.primitive == .WIRE     write_verilog("wire ");
         else if t.primitive == .ENUM     return;
         else if t.primitive == .CONSTANT return;
@@ -115,6 +116,10 @@ generate_statement :: (stmt: *Ast_Node) {
         }
 
         write_verilog(decl.name);
+
+        if t.primitive == .MEMORY {
+            write_verilog(" [0:%]", t.memory_depth);
+        }
         write_verilog(";\n\n");
 
       case .SEQUENTIAL_CIRCUIT;
@@ -206,6 +211,8 @@ generate_statement :: (stmt: *Ast_Node) {
         context.verilog.indentation_level -= 1;
 
         write_verilog("endcase\n");
+
+      case; assert(false);
     }
 }
 

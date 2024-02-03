@@ -161,6 +161,9 @@ Binary_Operator_Info :: struct {
     verilog_string: string;
     rtlil_cell_type: string;
     precedence: int;
+
+    // Could do this once the Jai compiler supports quick lambdas in struct literals
+    // result_width: (left: int, right: int) -> int;
 }
 
 get_operator_info :: (token: Token_Kind) -> *Binary_Operator_Info {
@@ -615,6 +618,10 @@ parse_atom :: () -> *Ast_Node {
         expect(.CLOSED_PAREN);
     }
 
+    else if peek(.OPEN_BRACKET) {
+        return parse_memory();
+    }
+
     if !atom {
         using context.parser;
         parse_error("Expected an expression, got token %", stringify_token(tokens[token_index].kind));
@@ -641,6 +648,22 @@ parse_atom :: () -> *Ast_Node {
     }
 
     return atom;
+}
+
+parse_memory :: () -> *Ast_Memory {
+    expect(.OPEN_BRACKET);
+    depth := parse_expression();
+    expect(.CLOSED_BRACKET);
+
+    expect(.KEYWORD_memory);
+    memory := Make_Ast(Ast_Memory);
+    memory.depth_expression = depth;
+
+    expect(.OPEN_BRACKET);
+    memory.width_expression = parse_expression();
+    expect(.CLOSED_BRACKET);
+
+    return memory;
 }
 
 parse_enum :: () -> *Ast_Enum {
@@ -1241,6 +1264,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .KEYWORD_module;        return "Keyword 'module'";
       case .KEYWORD_register;      return "Keyword 'register'";
       case .KEYWORD_enum;          return "Keyword 'enum'";
+      case .KEYWORD_memory;        return "Keyword 'memory'";
       case .KEYWORD_combinational; return "Keyword 'combinational'";
       case .KEYWORD_sequential;    return "Keyword 'sequential'";
       case .KEYWORD_using;         return "Keyword 'using'";

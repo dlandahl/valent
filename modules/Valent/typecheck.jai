@@ -161,11 +161,12 @@ typecheck_block :: (block: *Ast_Block) {
 
             if ass.target.datatype.enum_def {
                 if ass.expr.datatype.enum_def != ass.target.datatype.enum_def {
-                    semantic_error(ass, "In this assignment, the left side has an enum tag, but the right side is not a member of that enum\n\n%", node_location_string(ass));
+                    semantic_error(ass, "In this assignment, the left side has an enum tag, but the right side is not a member of that enum:\n\n%", node_location_string(ass)); // Todo say the name of the enum
                 }
             }
 
             if ass.trunc && ass.target.datatype.bit_width < ass.expr.datatype.bit_width {
+                // Don't error if trunc is used and the source is wider
             } else {
                 check_bit_width(ass, ass.target.datatype, ass.expr.datatype);
             }
@@ -316,7 +317,7 @@ typecheck_expression :: (expr: *Ast_Node) {
             } else {
                 assert(false);
             }
-        } else {
+        } else { // Factor this stuff into a flat if == {
             typecheck_expression(op.right);
             op.datatype = op.left.datatype;
 
@@ -344,7 +345,13 @@ typecheck_expression :: (expr: *Ast_Node) {
 
                     op.datatype.bit_width = left - right + 1;
                 } else {
-                    op.datatype.bit_width = 1;
+                    if op.left.datatype.primitive == .MEMORY {
+                        op.datatype = op.left.datatype;
+                        op.datatype.memory_depth = 0;
+                        op.datatype.primitive = .FLIPFLOP;
+                    } else {
+                        op.datatype.bit_width = 1;
+                    }
                 }
             }
         }
@@ -380,6 +387,9 @@ typecheck_expression :: (expr: *Ast_Node) {
         mod := cast(*Ast_Module) expr;
         typecheck_module(mod);
 
+      case .MODULE_INSTANTIATION; #through;
+      case .MEMORY;
+        semantic_error(expr, "This kind of construct is not allowed in a general expression:\n\n%", node_location_string(expr)); // Todo say what it is
       case; assert(false);
     }
 }
@@ -434,6 +444,29 @@ check_bit_width :: (ast: *Ast_Node, left: Datatype, right: Datatype) -> int {
     }
 
     return left.bit_width;
+}
+
+
+// Evaluate a bit-width expression. These are found in square brackets in type declarations. Width can come from a register/enum type name, or a constant expression that gives a number
+evaluate_width_expression :: (expr: *Ast_Node) -> int, *Enum_Def, *Register_Def {
+    typecheck_expression(expr);
+
+    width: int;
+    if expr.datatype.primitive == {
+      case .ENUM;
+        if expr.datatype.bit_width == -1 {
+            ident := cast(*Ast_Identifier) expr;
+            semantic_error(expr, "This width expression uses an enum without a specific width, which is not permitted:\n\n%\n\nThis is the enum (use `enum[N]` here):\n\n%", node_location_string(expr), node_location_string(ident.resolved_declaration));
+        }
+
+        return expr.datatype.bit_width, expr.datatype.enum_def, null;
+
+      case .REGISTER;
+        return expr.datatype.bit_width, null, expr.datatype.register_def;
+
+      case;
+        return evaluate_constant_expression(expr), null, null;
+    }
 }
 
 typecheck_declaration :: (decl: *Ast_Declaration) {
@@ -525,6 +558,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             if it.width_expr {
                 typecheck_expression(it.width_expr);
 
+                // Todo replace this with a call to `evaluate_width_expression`
                 if it.width_expr.datatype.primitive == {
                   case .ENUM;
                     new.enum_def = it.width_expr.datatype.enum_def;
@@ -532,12 +566,11 @@ evaluate_type_expression :: (expr: *Ast_Node) {
                         ident := cast(*Ast_Identifier) it.width_expr;
                         semantic_error(root, "This register contains an enum without a specific width:\n\n%\n\nThis is the enum (use `enum[N]` here):\n\n%", node_location_string(root), node_location_string(ident.resolved_declaration));
                     }
-                    new.width += it.width_expr.datatype.bit_width;
+                    new.width = it.width_expr.datatype.bit_width;
 
                   case .REGISTER;
                     new.register_def = it.width_expr.datatype.register_def;
                     new.width = it.width_expr.datatype.bit_width;
-                    
 
                   case;
                     new.width = evaluate_constant_expression(it.width_expr);
@@ -559,7 +592,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         }
 
         return;
-    } else if expr.kind == .BINARY_OP { // Bus
+    } else if expr.kind == .BINARY_OP {
         op := cast(*Ast_Binary_Op) expr;
 
         if op.operation != .OPEN_BRACKET {
@@ -596,10 +629,23 @@ evaluate_type_expression :: (expr: *Ast_Node) {
     } else if expr.kind == .MODULE {
         typecheck_module(cast(*Ast_Module) expr);
         return;
+
     } else if expr.kind == .MODULE_INSTANTIATION {
         typecheck_module_instantiation(cast(*Ast_Module_Inst) expr);
         expr.datatype.primitive = .MODULE;
         return;
+
+    } else if expr.kind == .MEMORY {
+        memory := cast(*Ast_Memory) expr;
+        expr.datatype.memory_depth = evaluate_constant_expression(memory.depth_expression);
+        expr.datatype.primitive = .MEMORY;
+
+        {
+            using expr.datatype;
+            bit_width, enum_def, register_def = evaluate_width_expression(memory.width_expression);
+        }
+        return;
+
     } else {
         expr.datatype.bit_width = 1;
     }

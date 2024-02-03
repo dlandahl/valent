@@ -45,7 +45,7 @@ Uart_Tx_Ctrl :: module (
             }
 
             case Tx_State.SEND_BIT {
-                if bit_done {
+                if baud_done {
                     if bit_index == BIT_INDEX_MAX
                         tx_state <= Tx_State.RDY;
                     else
@@ -70,18 +70,18 @@ Uart_Tx_Ctrl :: module (
     }
 
 
-    // Wait for baud timer
-    BIT_TIMER_MAX :: 14'10416;
+    // Counter to wait for the baud period
+    BAUD_TIMER_MAX :: 14'10416;
 
-    bit_timer: flipflop[14];
-    bit_done: wire;
-    combinational bit_done = bit_timer == BIT_TIMER_MAX;
+    baud_timer: flipflop[14];
+    baud_done: wire;
+    combinational baud_done = (baud_timer == BAUD_TIMER_MAX)[0];
 
     sequential (clock) {
-        if tx_state == Tx_State.RDY || bit_done {
-            bit_timer <= 0;
+        if tx_state == Tx_State.RDY || baud_done {
+            baud_timer <= 0;
         } else {
-            bit_timer <=,trunc bit_timer + 1;
+            baud_timer <=,trunc baud_timer + 1;
         }
     }
 }
