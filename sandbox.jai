@@ -1,6 +1,9 @@
 
 #import "Valent";
-#import "Yosys";
+
+#if OS != .LINUX {
+    #import "Yosys";
+}
 
 #import "Compiler";
 #import "Basic";
@@ -21,13 +24,13 @@
     if !success return;
 
     generate_verilog(p, "Top");
-    create_rtlil_design(p, "Top");
+    #if OS != .LINUX create_rtlil_design(p, "Top");
 }
 
 TEST_PROGRAM :: #string END
 
 Top :: module (clock: wire, a: wire) -> out: wire {
-    inv: Inverter(a, a) -> out;
+    inv: Inverter(a) -> out;
 }
 
 Inverter :: module (in: wire) -> out: wire {

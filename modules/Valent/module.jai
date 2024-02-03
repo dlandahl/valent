@@ -5,14 +5,16 @@
 #import "File_Utilities";
 #import "Bit_Operations";
 
-#import "Yosys";
+#if OS == .WINDOWS {
+    #import "Yosys";
+    #load "rtlil_backend.jai";
+}
 
 #load "runtime_shared.jai";
 #load "typecheck.jai";
 #load "parse.jai";
 
 #load "verilog_backend.jai";
-#load "rtlil_backend.jai";
 
 Program :: struct {
     ast: *Ast_Block;
@@ -47,21 +49,23 @@ generate_verilog :: (program: Program, top: string) -> string, bool {
     return "", false;
 }
 
-create_rtlil_design :: (program: Program, top: string) -> bool {
-    for program.ast.statements {
-        if it.kind != .DECLARATION continue;
+#if OS == .WINDOWS {
+    create_rtlil_design :: (program: Program, top: string) -> bool {
+        for program.ast.statements {
+            if it.kind != .DECLARATION continue;
 
-        decl := cast(*Ast_Declaration) it;
+            decl := cast(*Ast_Declaration) it;
 
-        if decl.name == top {
-            result := generate_rtlil(decl);
-            return true;
+            if decl.name == top {
+                result := generate_rtlil(decl);
+                return true;
+            }
         }
+
+        return false;
     }
 
-    return false;
-}
-
-run_yosys_command :: (command: *u8) {
-    yosys_run_pass(command);
+    run_yosys_command :: (command: *u8) {
+        yosys_run_pass(command);
+    }
 }
