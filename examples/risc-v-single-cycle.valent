@@ -1,0 +1,112 @@
+
+RiscV_Instruction :: register[32] {
+    opcode    [Opcode];
+    dest_reg  [5];
+    funct     [Funct];
+    src_reg1  [5];
+    src_reg2  [5];
+    immediate [7];
+}
+
+Processor :: module (clock: wire, instruction: wire[RiscV_Instruction]) -> pc: flipflop[32] {
+
+    control: wire[Control_Data];
+    opcode: wire[Opcode];
+
+    Control_Data :: register {
+        is_jump;
+        is_branch;
+        reg_write;
+    }
+
+    combinational {
+        opcode = instruction.opcode;
+
+        control = {
+            opcode == Opcode.jal,
+            opcode == Opcode.branch,
+            opcode == Opcode.op_imm || opcode == Opcode.op
+        };
+    }
+
+
+    pc_next: wire[32];
+
+    sequential (clock) {
+        pc <= pc_next;
+    }
+
+    jump_target: wire[32];
+    branch_target: wire[32];
+    branch_taken: wire;
+
+    combinational {
+        branch_taken = alu_result == 1;
+
+        if control.is_jump {
+            pc_next = jump_target;
+        } else if control.is_branch && branch_taken {
+            pc_next = branch_target;
+        } else {
+            pc_next =,trunc pc + 4;
+        }
+    }
+
+
+    register_file: [32] memory[32];
+
+    sequential (clock) {
+        if control.reg_write {
+            { register_file[instruction.dest_reg] } <= alu_result;
+        }
+    }
+
+
+    alu_result: wire[32];
+}
+
+// Block_Ram :: module () {
+// 
+// }
+// ram: Block_Ram(clock, address, write_enable, data_in) -> data_out;
+
+
+Opcode :: enum[7] {
+    auipc  :: 'b00_101_11;
+    lui    :: 'b01_101_11;
+    load   :: 'b00_000_11;
+    store  :: 'b01_000_11;
+    op_imm :: 'b00_100_11;
+    op     :: 'b01_100_11;
+    branch :: 'b11_000_11;
+    jalr   :: 'b11_001_11;
+    jal    :: 'b11_011_11;
+}
+
+Funct :: enum[3] {
+    op_add_sub  :: 'b000;
+    op_sll      :: 'b001;
+    op_slt      :: 'b010;
+    op_sltu     :: 'b011;
+    op_xor      :: 'b100;
+    op_srl_sra  :: 'b101;
+    op_or       :: 'b110;
+    op_and      :: 'b111;
+
+    branch_beq  :: 'b000;
+    branch_bne  :: 'b001;
+    branch_blt  :: 'b010;
+    branch_bge  :: 'b011;
+    branch_bltu :: 'b100;
+    branch_bgeu :: 'b101;
+
+    load_lb     :: 'b000;
+    load_lh     :: 'b001;
+    load_lw     :: 'b010;
+    load_lbu    :: 'b100;
+    load_lhu    :: 'b101;
+
+    store_sb    :: 'b000;
+    store_sh    :: 'b001;
+    store_sw    :: 'b010;
+}
