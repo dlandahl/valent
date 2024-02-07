@@ -134,7 +134,7 @@ stringify_statement :: (ast: *Ast_Node) -> string {
 }
 
 operator_info :: Binary_Operator_Info.[
-    .{ .OPERATOR_DOT,              "",   "",           13 },
+    .{ .OPERATOR_DOT,              "",   "",           14 },
     .{ .OPERATOR_ADD,              "+",  "$add",       10 },
     .{ .OPERATOR_SUBTRACT,         "-",  "$sub",       10 },
     .{ .OPERATOR_MULTIPLY,         "*","  $mul",       11 },
@@ -150,6 +150,7 @@ operator_info :: Binary_Operator_Info.[
     .{ .OPERATOR_EQUALS,           "==", "$eq",        6  },
     .{ .OPERATOR_NOT_EQUAL,        "!=", "$ne",        6  },
     .{ .OPERATOR_LOGICAL_OR,       "||", "$logic_or",  1  },
+    .{ .OPERATOR_WIDTH,            "'",  "",           13 },
     .{ .OPERATOR_LOGICAL_AND,      "&&", "$logic_and", 2  },
     .{ .OPERATOR_SHIFT_LEFT,       "<<", "$shl",       9  },
     .{ .OPERATOR_SHIFT_RIGHT,      ">>", "$shr",       9  },
@@ -245,7 +246,7 @@ parse_statement :: () -> *Ast_Node {
             return decl;
         }
 
-        if peek(.EQUALS, .OPERATOR_LESS_OR_EQUAL, distance = 2) {
+        if peek(.EQUALS, .OPERATOR_LESS_OR_EQUAL, .OPERATOR_DOT, .OPEN_BRACKET, distance = 2) {
             return parse_assignment();
         }
 
@@ -521,20 +522,6 @@ parse_factor :: () -> *Ast_Node {
     }
 
     return parse_atom();
-}
-
-peek_type :: () -> bool {
-    if peek(.KEYWORD_enum) return true;
-    if peek(.KEYWORD_module) return true;
-    if peek(.KEYWORD_register) return true;
-
-    if peek(.IDENTIFIER) {
-        using context.parser;
-        id := tokens[token_index].string_value;
-        return id == "flipflop" || id == "wire";
-    }
-
-    return false;
 }
 
 parse_atom :: () -> *Ast_Node {
@@ -827,6 +814,20 @@ parse_parameter_list :: () -> [] *Ast_Declaration, [] *Ast_Declaration, [] *Ast_
     return constants, inputs, outputs;
 }
 
+peek_type :: () -> bool {
+    if peek(.KEYWORD_enum) return true;
+    if peek(.KEYWORD_module) return true;
+    if peek(.KEYWORD_register) return true;
+
+    if peek(.IDENTIFIER) {
+        using context.parser;
+        id := tokens[token_index].string_value;
+        return id == "flipflop" || id == "wire";
+    }
+
+    return false;
+}
+
 
 allow :: (allowed: .. Token_Kind) -> bool {
     using context.parser;
@@ -1062,6 +1063,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
       case #char "^"; Emit(.OPERATOR_BIT_XOR);
       case #char "~"; Emit(.TILDE);
       case #char ":"; Emit(.COLON);
+      // case #char "'"; Emit(.OPERATOR_WIDTH);
 
       case #char "|";
         cursor += 1;
@@ -1242,6 +1244,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .OPERATOR_ADD;          return "Plus (+)";
       case .OPERATOR_MULTIPLY;     return "Asterisk (*)";
       case .OPERATOR_DIVIDE;       return "Slash (/)";
+      case .OPERATOR_WIDTH;        return "Apostrophe (')";
       case .COMMA;                 return "Comma (,)";
       case .OPERATOR_BIT_OR;       return "Vertical Bar (|)";
       case .SEMICOLON;             return "Semicolon (;)";
@@ -1298,4 +1301,90 @@ lookup_keyword :: (ident: string) -> Token_Kind {
     }
 
     return .INVALID;
+}
+
+// Copied from Basic except it skips underscores
+string_to_int :: (t: string, base := 10, $T := int) -> result: T, success: bool, remainder: string {
+    //
+    // This string_to_int might be a little slower than max speed because we multiply by 'sign' for
+    // each digit. Our original approach did not do this, but rather we just accumulated into a
+    // positive value and then negated at the end if we saw a -. But this does not let us parse the
+    // maximum negative number without overflowing the positive number, which works, *if* you are
+    // not doing arithmetic bounds checks. We could have done #no_abc on this procedure, but
+    // I decided it's worthwhile to just try to preserve the ability to report genuine overflows,
+    // so I did 'the clean version' here.    -jblow, 4 July 2023
+    //
+    assert(base == 16 || base <= 10);
+    
+    s := eat_spaces(t);
+
+    if !s return 0, false, "";
+
+    sign : T = 1;
+    
+    #if #run type_info(T).signed {
+        if s[0] == #char "-" {
+            sign = -1;
+            advance(*s, 1);
+            s = eat_spaces(s);
+        } else if s[0] == #char "+" {
+            advance(*s, 1);
+            s = eat_spaces(s);
+        }
+    }
+
+    sum: T = 0;
+    cursor := 0;
+
+    // @Incomplete: We should probably check for overflows…
+    if base == 16 {
+        while cursor < s.count {
+            c := s[cursor];
+
+            if c == #char "_" {
+                cursor += 1;
+                continue;
+            }
+
+            value: u8 = ---;
+            if is_digit(c) {
+                value = c - #char "0";
+            } else if (c >= #char "a") && (c <= #char "f") {
+                value = c - #char "a" + 10;
+            } else if (c >= #char "A") && (c <= #char "F") {
+                value = c - #char "A" + 10;
+            } else {
+                break;
+            }
+
+            sum *= cast(T) base;
+            sum += sign*value;
+
+            cursor += 1;
+        }
+    } else {
+        while cursor < s.count {
+            c := s[cursor];
+
+            if c == #char "_" {
+                cursor += 1;
+                continue;
+            }
+
+            if !is_digit(c) break;
+
+            digit := c - #char "0";
+            if digit >= base break;
+
+            sum *= cast(T) base;
+            sum += sign*digit;
+
+            cursor += 1;
+        }
+    }
+
+    success := (cursor != 0);
+    advance(*s, cursor);
+
+    return sum, success, s;
 }

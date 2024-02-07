@@ -239,9 +239,12 @@ typecheck_expression :: (expr: *Ast_Node) {
         array_add(*context.typechecker.in_progress, expr);
     }
 
-    defer if expr.kind == .IDENTIFIER {
+    defer {
+        if expr.kind == .IDENTIFIER {
+            pop(*context.typechecker.in_progress);
+        }
+
         expr.typechecked = true;
-        pop(*context.typechecker.in_progress);
     }
 
     if expr.kind == {
@@ -293,7 +296,7 @@ typecheck_expression :: (expr: *Ast_Node) {
                 }
 
                 if !found {
-                    semantic_error(op, "Name '%' was not found in the enum\n\n%", ident.name, node_location_string(op.right)); // Todo show the declaration
+                    semantic_error(op, "Name '%' was not found in the enum:\n\n%\n\nDeclared here:\n\n%", ident.name, node_location_string(op.right), node_location_string(op.left.datatype.enum_def.decl));
                 }
 
             } else if op.left.datatype.register_def != null {
@@ -306,7 +309,7 @@ typecheck_expression :: (expr: *Ast_Node) {
                 }
 
                 if field == null {
-                    semantic_error(op.left, "The name '%' was not found in the register\n\n%", ident.name, node_location_string(op.right)); // Todo show the declaration
+                    semantic_error(op, "Name '%' was not found in the register:\n\n%\n\nDeclared here:\n\n%", ident.name, node_location_string(op.right), node_location_string(op.left.datatype.register_def.decl));
                 }
 
                 op.datatype.primitive = op.left.datatype.primitive;
@@ -325,16 +328,27 @@ typecheck_expression :: (expr: *Ast_Node) {
                 op.datatype = op.right.datatype;
                 count := evaluate_constant_expression(op.left);
                 op.datatype.bit_width *= count;
-            } else if op.operation != .OPEN_BRACKET {
-                op.datatype.bit_width = max(op.left.datatype.bit_width, op.right.datatype.bit_width);
+            } else if op.operation == .OPERATOR_WIDTH {
+                width := evaluate_constant_expression(op.left);
 
-                if op.operation == .OPERATOR_ADD              op.datatype.bit_width += 1;
-                if op.operation == .OPERATOR_MULTIPLY         op.datatype.bit_width *= 2;
-                if op.operation == .OPERATOR_EQUALS           op.datatype.bit_width = 1;
-                if op.operation == .OPERATOR_LESS_THAN        op.datatype.bit_width = 1;
-                if op.operation == .OPERATOR_GREATER_OR_EQUAL op.datatype.bit_width = 1;
-                if op.operation == .OPERATOR_LESS_OR_EQUAL    op.datatype.bit_width = 1;
-                if op.operation == .OPERATOR_GREATER_THAN     op.datatype.bit_width = 1;
+                evaluate_constant_expression(op.right); // To verify it's actually constant
+
+                op.datatype.primitive = .CONSTANT;
+                op.datatype.bit_width = width;
+
+            } else if op.operation != .OPEN_BRACKET {
+
+                if op.operation == {
+                    case .OPERATOR_ADD;              op.datatype.bit_width += 1;
+                    case .OPERATOR_MULTIPLY;         op.datatype.bit_width *= 2;
+                    case .OPERATOR_EQUALS;           op.datatype.bit_width = 1;
+                    case .OPERATOR_LESS_THAN;        op.datatype.bit_width = 1;
+                    case .OPERATOR_GREATER_OR_EQUAL; op.datatype.bit_width = 1;
+                    case .OPERATOR_LESS_OR_EQUAL;    op.datatype.bit_width = 1;
+                    case .OPERATOR_GREATER_THAN;     op.datatype.bit_width = 1;
+                    case .OPERATOR_NOT_EQUAL;        op.datatype.bit_width = 1;
+                    case; op.datatype.bit_width = max(op.left.datatype.bit_width, op.right.datatype.bit_width);
+                }
 
             } else {
                 if op.right.kind == .BIT_SELECT {
@@ -482,8 +496,16 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
     }
 
     if decl.initialisation_value && decl.datatype.is_type {
+        // For now we have to do this because types are not general expressions
         evaluate_type_expression(decl.initialisation_value);
         decl.datatype = decl.initialisation_value.datatype;
+
+        if decl.datatype.enum_def {
+            decl.datatype.enum_def.decl = decl;
+        } else if decl.datatype.register_def {
+            decl.datatype.register_def.decl = decl;
+        }
+
     } else if decl.type_expression {
         evaluate_type_expression(decl.type_expression);
         decl.datatype = decl.type_expression.datatype;
@@ -701,7 +723,7 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
                     if it.name == ident.name return it.value;
                 }
 
-                semantic_error(op, "Name '%' was not found in the enum\n\n%", ident.name, node_location_string(op.right));
+                semantic_error(op, "Name '%' was not found in the enum:\n\n%\n\nDeclared here:\n\n%", ident.name, node_location_string(op.right), node_location_string(op.left.datatype.enum_def.decl));
             }
 
             left := internal_evaluate(op.left);
@@ -727,7 +749,7 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
             if prim == .MODULE || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
                 l1 := node_location_string(id);
                 l2 := node_location_string(id.resolved_declaration);
-                semantic_error(id, "This identifier was used in a constant expression, but refers to a circuit element.\n\n%\n\nDeclared here\n\n%", l1, l2);
+                semantic_error(id, "This identifier was used in a constant expression, but refers to a circuit element:\n\n%\n\nDeclared here:\n\n%", l1, l2);
             }
 
             if id.resolved_declaration.datatype.is_type {
@@ -784,6 +806,10 @@ resolve_identifier :: (id: *Ast_Identifier) {
 
 Walk_Expression :: (expr: *Ast_Node, $code: Code, $deferred: Code = #code {}, user_data: *$T = null) {
 
+    #if #run (cast(*Type_Info) T).type == .STRUCT {
+        using user_data;
+    }
+
     #insert,scope() code;
 
     if expr.kind == {
@@ -810,6 +836,43 @@ Walk_Expression :: (expr: *Ast_Node, $code: Code, $deferred: Code = #code {}, us
             Walk_Expression(it, code, deferred, user_data);
         }
 
+      case; assert(false);
+    }
+
+    #insert,scope() deferred;
+}
+
+Walk_Statements :: (block: *Ast_Block, $code: Code, $deferred: Code = #code {}, user_data: *$T = null) {
+
+    #if #run (cast(*Type_Info) T).type == .STRUCT {
+        using user_data;
+    }
+
+    #insert,scope() code;
+
+    for block.statements if it.kind == {
+      case .DECLARATION;
+      case .ASSIGNMENT;
+      case .IF;
+        _if := cast(*Ast_If) it;
+        Walk_Statements(_if.block, code, deferred, user_data);
+
+        if _if.else_block
+            Walk_Statements(_if.else_block, code, deferred, user_data);
+
+      case .SWITCH;
+        switch := cast(*Ast_Switch) it;
+        for switch.cases Walk_Statements(it.block, code, deferred, user_data);
+
+      case .SEQUENTIAL_CIRCUIT;
+        seq := cast(*Ast_Sequential_Circuit) it;
+        Walk_Statements(seq.block, code, deferred, user_data);
+
+      case .COMBINATIONAL_CIRCUIT;
+        comb := cast(*Ast_Combinational_Circuit) it;
+        Walk_Statements(comb.block, code, deferred, user_data);
+
+      case .JAI_CODE;
       case; assert(false);
     }
 

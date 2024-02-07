@@ -20,35 +20,19 @@
     // run_yosys_command("dump");
     // return;
 
-    // uart := read_entire_file("examples/uart.valent");
-    p, success := compile(TEST_PROGRAM);
+    riscv := read_entire_file("examples/risc-v-single-cycle.valent");
+    p, success := compile(riscv);
     if !success return;
 
-    if !generate_verilog(p, "Top") print("Top is wrong\n");
-    #if OS != .LINUX create_rtlil_design(p, "Top");
+    if !generate_verilog(p, "Processor") print("Top is wrong\n");
+    // #if OS != .LINUX create_rtlil_design(p, "Sim_Test");
 }
 
 TEST_PROGRAM :: #string END
 
-Hamming :: register {
-    data[11];
-    parity[4];
-}
-
-Test :: enum [11] {
-    a; b; c; d; a; f; g; h; i;
-}
-
-Top :: module (clock: wire, index: wire[9]) -> out: flipflop[Test] {
-    ram: [512] memory[Test];
-
-    sequential (clock) {
-        out <= ram[index];
-    }
-}
-
-Inverter :: module (in: wire) -> out: wire {
-    combinational { out = !in; }
+Sim_Test :: module (in: wire) {
+    out: wire;
+    combinational out = in;
 }
 
 END;
