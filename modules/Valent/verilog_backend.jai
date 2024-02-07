@@ -38,7 +38,7 @@ generate_module :: (decl: *Ast_Declaration) {
     }
 
     for module.outputs {
-        write_verilog("    output %", ifx it.datatype.primitive == .FLIPFLOP then "reg " else "");
+        write_verilog("    output reg ");
 
         if it.datatype.bit_width > 1 {
             write_verilog("[%:0] ", it.datatype.bit_width-1);
@@ -107,7 +107,7 @@ generate_statement :: (stmt: *Ast_Node) {
 
         if      t.primitive == .FLIPFLOP write_verilog("reg ");
         else if t.primitive == .MEMORY   write_verilog("reg ");
-        else if t.primitive == .WIRE     write_verilog("wire ");
+        else if t.primitive == .WIRE     write_verilog("reg ");
         else if t.primitive == .ENUM     return;
         else if t.primitive == .CONSTANT return;
         else if t.primitive == .REGISTER return;
@@ -120,6 +120,8 @@ generate_statement :: (stmt: *Ast_Node) {
 
         if t.primitive == .MEMORY {
             write_verilog(" [0:%]", t.memory_depth);
+        } else {
+            write_verilog(" = 0");
         }
         write_verilog(";\n\n");
 
@@ -137,25 +139,27 @@ generate_statement :: (stmt: *Ast_Node) {
 
       case .COMBINATIONAL_CIRCUIT;
         comb := cast(*Ast_Combinational_Circuit) stmt;
-        // write_verilog("always @* ");
-        // 
-        // if comb.block.statements.count > 1 {
-        //     write_verilog("begin\n");
-        // }
+        write_verilog("always @* ");
 
+        if comb.block.statements.count > 1 {
+            write_verilog("begin\n");
+        }
+
+        context.verilog.indentation_level += 1;
         for comb.block.statements {
             generate_statement(it);
         }
+        context.verilog.indentation_level -= 1;
 
-        // if comb.block.statements.count > 1 write_verilog("\nend");
+        if comb.block.statements.count > 1 write_verilog("\nend");
         write_verilog("\n");
 
       case .ASSIGNMENT;
         ass := cast(*Ast_Assignment) stmt;
 
-        if ass.type == .COMBINATIONAL {
-            write_verilog("assign ");
-        }
+        // if ass.type == .COMBINATIONAL {
+        //     write_verilog("assign ");
+        // }
 
         generate_expression(ass.target);
         write_verilog(ifx ass.type == .SEQUENTIAL " <= " else " = ");
@@ -199,7 +203,9 @@ generate_statement :: (stmt: *Ast_Node) {
         context.verilog.indentation_level += 1;
         for switch.cases {
             value := evaluate_constant_expression(it.compare);
-            write_verilog("%: begin\n", value);
+            write_verilog("%: ", value);
+            
+            if it.block.statements.count > 1 write_verilog("begin\n");
 
             context.verilog.indentation_level += 1;
             for it.block.statements {
@@ -207,7 +213,7 @@ generate_statement :: (stmt: *Ast_Node) {
             }
             context.verilog.indentation_level -= 1;
 
-            write_verilog("end\n");
+            if it.block.statements.count > 1 write_verilog("end\n");
         }
         context.verilog.indentation_level -= 1;
 
@@ -274,6 +280,11 @@ generate_expression :: (expr: *Ast_Node) {
             write_verilog("{%{ ", count);
             generate_expression(op.right);
             write_verilog(" }}");
+        } else if op.operation == .OPERATOR_WIDTH {
+            width := evaluate_constant_expression(op.left);
+            constant := evaluate_constant_expression(op.right);
+            write_verilog("%'d%", width, constant);
+
         } else {
             info := get_operator_info(op.operation);
 

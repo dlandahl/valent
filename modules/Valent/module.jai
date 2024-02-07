@@ -5,16 +5,16 @@
 #import "File_Utilities";
 #import "Bit_Operations";
 
+#load "runtime_shared.jai";
+#load "typecheck.jai";
+#load "parse.jai";
+// #load "simulation.jai";
+#load "verilog_backend.jai";
+
 #if OS == .WINDOWS {
     #import "Yosys";
     #load "rtlil_backend.jai";
 }
-
-#load "runtime_shared.jai";
-#load "typecheck.jai";
-#load "parse.jai";
-
-#load "verilog_backend.jai";
 
 Program :: struct {
     ast: *Ast_Block;
@@ -41,6 +41,8 @@ generate_verilog :: (program: Program, top: string) -> string, bool {
         decl := cast(*Ast_Declaration) it;
 
         if decl.name == top {
+            // build_wire_dag(decl);
+
             result := generate_verilog(decl);
             return result, true;
         }

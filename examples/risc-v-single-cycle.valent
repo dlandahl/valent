@@ -1,112 +1,197 @@
 
-RiscV_Instruction :: register[32] {
-    opcode    [Opcode];
-    dest_reg  [5];
-    funct     [Funct];
-    src_reg1  [5];
-    src_reg2  [5];
-    immediate [7];
-}
+Processor :: module (clock: wire, reset: wire, instruction: wire[RiscV_Instruction]) -> pc: flipflop[32], write: flipflop[Memory_Write] {
 
-Processor :: module (clock: wire, instruction: wire[RiscV_Instruction]) -> pc: flipflop[32] {
+    RiscV_Instruction :: register[32] {
+        opcode    [Opcode];
+        dest_reg  [5];
+        funct3    [Funct];
+        src_reg1  [5];
+        src_reg2  [5];
+        funct7    [7];
+    }
 
-    control: wire[Control_Data];
     opcode: wire[Opcode];
+    combinational opcode = instruction.opcode;
 
-    Control_Data :: register {
-        is_jump;
-        is_branch;
-        reg_write;
-    }
 
+
+    imm: wire[32];
+
+    I_immediate: wire[32];
+    S_immediate: wire[32];
+    B_immediate: wire[32];
+    U_immediate: wire[32];
+    J_immediate: wire[32];
+
+    op: wire[32];
     combinational {
-        opcode = instruction.opcode;
+        op = instruction;
 
-        control = {
-            opcode == Opcode.jal,
-            opcode == Opcode.branch,
-            opcode == Opcode.op_imm || opcode == Opcode.op
-        };
+        I_immediate = { 21 # op[31], op[30:20] };
+        S_immediate = { 21 # op[31], op[30:25], op[11:7] };
+        B_immediate = { 20 # op[31], op[7], op[30:25], op[11:8], 1'b0 };
+        U_immediate = { op[31:12], 12'b0 };
+        J_immediate = { 12 # op[31], op[19:12], op[20], op[30:25], op[24:21], 1'b0 };
+
+        switch instruction.opcode {
+            case Opcode.AUIPC  imm = U_immediate;
+            case Opcode.LUI    imm = U_immediate;
+            case Opcode.LOAD   imm = I_immediate;
+            case Opcode.STORE  imm = S_immediate;
+            case Opcode.OP_IMM imm = I_immediate;
+            case Opcode.OP     imm = 32'b0;
+            case Opcode.BRANCH imm = B_immediate;
+            case Opcode.JAL    imm = J_immediate;
+            case Opcode.JALR   imm = J_immediate;
+        }
     }
 
 
-    pc_next: wire[32];
 
-    sequential (clock) {
-        pc <= pc_next;
+    pc_next: wire[32 + 1];
+
+    sequential (clock) if !reset {
+        pc <=,trunc pc_next;
+    } else {
+        pc <= 0;
     }
 
-    jump_target: wire[32];
-    branch_target: wire[32];
     branch_taken: wire;
+    jump_target:  wire[32];
 
     combinational {
         branch_taken = alu_result == 1;
 
-        if control.is_jump {
-            pc_next = jump_target;
-        } else if control.is_branch && branch_taken {
-            pc_next = branch_target;
+        if opcode == Opcode.JAL {
+            pc_next = pc + imm;
+        } else if opcode == Opcode.JALR {
+            pc_next = pc + alu_result;
+        } else if opcode == Opcode.BRANCH && branch_taken {
+            pc_next = pc + imm;
         } else {
-            pc_next =,trunc pc + 4;
+            pc_next = pc + 4;
         }
     }
+
 
 
     register_file: [32] memory[32];
 
-    sequential (clock) {
-        if control.reg_write {
+    Memory_Write :: register {
+        enable;
+        address[32];
+        data[32];
+    }
+
+    sequential (clock) if !reset {
+        if opcode == Opcode.OP || opcode == Opcode.OP_IMM {
             { register_file[instruction.dest_reg] } <= alu_result;
+        }
+
+        if opcode == Opcode.STORE {
+            write <= { 1'b1, alu_result, rs1 };
+        } else {
+            write <= 0;
         }
     }
 
+    rs1: wire[32];
+    rs2: wire[32];
+
+    combinational {
+        rs1 = register_file[instruction.src_reg1];
+        rs2 = register_file[instruction.src_reg2];
+    }
+
+
 
     alu_result: wire[32];
+    alu_lhs: wire[32];
+    alu_rhs: wire[32];
+
+    use_immediate: wire;
+    funct7: wire;
+
+    combinational {
+        alu_lhs = rs1;
+
+        use_immediate = opcode == Opcode.OP_IMM
+                     || opcode == Opcode.LOAD
+                     || opcode == Opcode.STORE
+                     || opcode == Opcode.JALR;
+
+        if use_immediate {
+            alu_rhs = imm;
+        } else {
+            alu_rhs = rs2;
+        }
+
+        funct7 = instruction.funct7 > 0;
+
+        if opcode == Opcode.OP || opcode == Opcode.OP_IMM {
+            switch instruction.funct3 {
+                case Funct.OP_ADD_SUB
+                    if funct7      alu_result = alu_lhs  -  alu_rhs;
+                    else           alu_result =,trunc alu_lhs  +  alu_rhs;
+                case Funct.OP_SRL_SRA
+                    if funct7      alu_result = alu_lhs >>  alu_rhs;
+                    else           alu_result = 32'b0; // alu_lhs >>> alu_rhs;
+                case Funct.OP_SLL  alu_result = alu_lhs  << alu_rhs;
+                case Funct.OP_SLT  { { alu_result[0] } = alu_lhs  <  alu_rhs; } // Todo: sign
+                case Funct.OP_SLTU { { alu_result[0] } = alu_lhs  <  alu_rhs; }
+                case Funct.OP_XOR  alu_result = alu_lhs  ^  alu_rhs;
+                case Funct.OP_OR   alu_result = alu_lhs  |  alu_rhs;
+                case Funct.OP_AND  alu_result = alu_lhs  &  alu_rhs;
+            }
+        }
+
+        if opcode == Opcode.BRANCH switch instruction.funct3 {
+            case Funct.BRANCH_BEQ  alu_result = { 31'b0, alu_lhs == alu_rhs };
+            case Funct.BRANCH_BNE  alu_result = { 31'b0, alu_lhs != alu_rhs };
+            case Funct.BRANCH_BLT  alu_result = { 31'b0, alu_lhs <  alu_rhs }; // Todo: sign
+            case Funct.BRANCH_BGE  alu_result = { 31'b0, alu_lhs >= alu_rhs }; // Todo: sign
+            case Funct.BRANCH_BLTU alu_result = { 31'b0, alu_lhs <  alu_rhs };
+            case Funct.BRANCH_BGEU alu_result = { 31'b0, alu_lhs >= alu_rhs };
+        }
+    }
 }
 
-// Block_Ram :: module () {
-// 
-// }
-// ram: Block_Ram(clock, address, write_enable, data_in) -> data_out;
-
-
 Opcode :: enum[7] {
-    auipc  :: 'b00_101_11;
-    lui    :: 'b01_101_11;
-    load   :: 'b00_000_11;
-    store  :: 'b01_000_11;
-    op_imm :: 'b00_100_11;
-    op     :: 'b01_100_11;
-    branch :: 'b11_000_11;
-    jalr   :: 'b11_001_11;
-    jal    :: 'b11_011_11;
+    AUIPC  :: 'b00_101_11;
+    LUI    :: 'b01_101_11;
+    LOAD   :: 'b00_000_11;
+    STORE  :: 'b01_000_11;
+    OP_IMM :: 'b00_100_11;
+    OP     :: 'b01_100_11;
+    BRANCH :: 'b11_000_11;
+    JALR   :: 'b11_001_11;
+    JAL    :: 'b11_011_11;
 }
 
 Funct :: enum[3] {
-    op_add_sub  :: 'b000;
-    op_sll      :: 'b001;
-    op_slt      :: 'b010;
-    op_sltu     :: 'b011;
-    op_xor      :: 'b100;
-    op_srl_sra  :: 'b101;
-    op_or       :: 'b110;
-    op_and      :: 'b111;
+    OP_ADD_SUB  :: 'b000;
+    OP_SLL      :: 'b001;
+    OP_SLT      :: 'b010;
+    OP_SLTU     :: 'b011;
+    OP_XOR      :: 'b100;
+    OP_SRL_SRA  :: 'b101;
+    OP_OR       :: 'b110;
+    OP_AND      :: 'b111;
 
-    branch_beq  :: 'b000;
-    branch_bne  :: 'b001;
-    branch_blt  :: 'b010;
-    branch_bge  :: 'b011;
-    branch_bltu :: 'b100;
-    branch_bgeu :: 'b101;
+    BRANCH_BEQ  :: 'b000;
+    BRANCH_BNE  :: 'b001;
+    BRANCH_BLT  :: 'b010;
+    BRANCH_BGE  :: 'b011;
+    BRANCH_BLTU :: 'b100;
+    BRANCH_BGEU :: 'b101;
 
-    load_lb     :: 'b000;
-    load_lh     :: 'b001;
-    load_lw     :: 'b010;
-    load_lbu    :: 'b100;
-    load_lhu    :: 'b101;
+    LOAD_LB     :: 'b000;
+    LOAD_LH     :: 'b001;
+    LOAD_LW     :: 'b010;
+    LOAD_LBU    :: 'b100;
+    LOAD_LHU    :: 'b101;
 
-    store_sb    :: 'b000;
-    store_sh    :: 'b001;
-    store_sw    :: 'b010;
+    STORE_SB    :: 'b000;
+    STORE_SH    :: 'b001;
+    STORE_SW    :: 'b010;
 }
