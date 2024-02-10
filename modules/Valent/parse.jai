@@ -319,19 +319,37 @@ parse_statement :: () -> *Ast_Node {
     return null;
 }
 
-parse_assignment :: () -> *Ast_Assignment {
-    lhs: *Ast_Node;
-
+parse_lvalue :: () -> *Ast_Node {
     if peek(.OPEN_BRACE) {
-        lhs = parse_concat();
+        return parse_concat();
     } else {
         ident_token := expect(.IDENTIFIER);
 
         ident := Make_Ast(Ast_Identifier);
         ident.name = ident_token.string_value;
 
+        lhs: *Ast_Node;
         lhs = ident;
+
+        while true {
+            if peek(.OPEN_BRACKET) {
+                lhs = parse_indexing_brackets(lhs);
+            } else if allow(.OPERATOR_DOT) {
+                op := Make_Ast(Ast_Binary_Op);
+                op.operation = .OPERATOR_DOT;
+                op.left = lhs;
+                op.right = parse_lvalue();
+
+                lhs = op;
+            } else break;
+        }
+
+        return lhs;
     }
+}
+
+parse_assignment :: () -> *Ast_Assignment {
+    lhs: *Ast_Node = parse_lvalue();
 
     op := expect(.EQUALS, .OPERATOR_LESS_OR_EQUAL);
     ass := Make_Ast(Ast_Assignment);
@@ -616,25 +634,31 @@ parse_atom :: () -> *Ast_Node {
         return null;
     }
 
-    while allow(.OPEN_BRACKET) {
-        op := Make_Ast(Ast_Binary_Op);
-        op.operation = .OPEN_BRACKET; // Eh...
-        op.left = atom;
-        op.right = parse_expression();
-
-        if allow(.COLON) {
-            sel := Make_Ast(Ast_Bit_Select);
-            sel.left = op.right;
-            op.right = sel;
-            sel.right = parse_expression();
-        }
-
-        expect(.CLOSED_BRACKET);
-
-        atom = op;
+    while peek(.OPEN_BRACKET) {
+        atom = parse_indexing_brackets(atom);
     }
 
     return atom;
+}
+
+parse_indexing_brackets :: (left: *Ast_Node) -> *Ast_Binary_Op {
+    expect(.OPEN_BRACKET);
+
+    op := Make_Ast(Ast_Binary_Op);
+    op.operation = .OPEN_BRACKET;
+    op.left = left;
+    op.right = parse_expression();
+
+    if allow(.COLON) {
+        sel := Make_Ast(Ast_Bit_Select);
+        sel.left = op.right;
+        op.right = sel;
+        sel.right = parse_expression();
+    }
+
+    expect(.CLOSED_BRACKET);
+
+    return op;
 }
 
 parse_memory :: () -> *Ast_Memory {
