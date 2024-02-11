@@ -138,12 +138,13 @@ typecheck_block :: (block: *Ast_Block) {
 
             typecheck_expression(ass.target);
 
-            Walk_Expression(ass.target, #code {
-                if expr.kind == .LITERAL {
-                    lit := cast(*Ast_Literal) expr;
-                    if lit.int_value != 0 semantic_error(lit, "Literals in lvalue concatenations must be zero - they only align the writable elements.\n\n%", node_location_string(lit));
-                }
-            });
+            // Commented out for now because it catches expressions in bit selects
+            // Walk_Expression(ass.target, #code {
+            //     if expr.kind == .LITERAL {
+            //         lit := cast(*Ast_Literal) expr;
+            //         if lit.int_value != 0 semantic_error(lit, "Literals in lvalue concatenations must be zero - they only align the writable elements.\n\n%", node_location_string(lit));
+            //     }
+            // });
 
             typecheck_expression(ass.expr);
 
@@ -354,10 +355,24 @@ typecheck_expression :: (expr: *Ast_Node) {
                 if op.right.kind == .BIT_SELECT {
                     sel := cast(*Ast_Bit_Select) op.right;
 
-                    left  := evaluate_constant_expression(sel.left);
                     right := evaluate_constant_expression(sel.right);
 
-                    op.datatype.bit_width = left - right + 1;
+                    if sel.select_type == {
+                      case .RANGE;
+                        left := evaluate_constant_expression(sel.left);
+                        op.datatype.bit_width = left - right + 1;
+
+                      case .POSITIVE_FIXED_WIDTH; #through;
+                      case .NEGATIVE_FIXED_WIDTH;
+                        typecheck_expression(sel.left);
+
+                        if sel.left.datatype.primitive != .CONSTANT && sel.left.datatype.primitive != .WIRE && sel.left.datatype.primitive != .FLIPFLOP {
+                            semantic_error(sel, "The left side of a fixed width bit selection should be a signal or a constant:\n\n%", node_location_string(sel));
+                        }
+
+                        op.datatype.bit_width = right;
+                    }
+
                 } else {
                     if op.left.datatype.primitive == .MEMORY {
                         op.datatype = op.left.datatype;
@@ -900,5 +915,5 @@ node_location_string :: (node: *Ast_Node) -> string {
     third.data += loc.end_char;
     third.count -= loc.end_char;
 
-    return tprint("(line %): %[31m%[0m%", loc.line, first, second, third);
+    return tprint("(line %): %[31m%[0m%", loc.line+1, first, second, third);
 }

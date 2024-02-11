@@ -6,9 +6,20 @@ Processor :: module (
     data_in: wire[32]
 ) -> (
     pc: flipflop[32],
-    write: flipflop[Memory_Write],
-    read: wire[Memory_Read]
+    memory_access: wire[Memory_Access],
 ) {
+
+    Mode :: enum [1] { EXECUTE; MEMORY; }
+    mode: flipflop[Mode];
+
+    // Alternate cycles for instruction execution and waiting for memory latency
+
+    sequential (clock) {
+        if reset mode <= Mode.EXECUTE;
+        else     mode <= !mode;
+    }
+
+
 
     RiscV_Instruction :: register[32] {
         opcode    [Opcode];
@@ -39,7 +50,7 @@ Processor :: module (
         I_immediate = { 21 # op[31], op[30:20] };
         S_immediate = { 21 # op[31], op[30:25], op[11:7] };
         B_immediate = { 20 # op[31], op[7], op[30:25], op[11:8], 1'b0 };
-        U_immediate = {      op[31:12], 12'b0 };
+        U_immediate = { op[31:12], 12'b0 };
         J_immediate = { 12 # op[31], op[19:12], op[20], op[30:25], op[24:21], 1'b0 };
 
         switch instruction.opcode {
@@ -59,14 +70,15 @@ Processor :: module (
 
     pc_next: wire[32 + 1];
 
-    sequential (clock) if !reset {
-        pc <=,trunc pc_next;
-    } else {
-        pc <= 0;
+    sequential (clock) {
+        if mode == Mode.EXECUTE {
+            pc <=,trunc pc_next;
+        }
+
+        if reset pc <= 0;
     }
 
     branch_taken: wire;
-    jump_target:  wire[32];
 
     combinational {
         branch_taken = alu_result == 1;
@@ -86,29 +98,14 @@ Processor :: module (
 
     register_file: [32] memory[32];
 
-    Memory_Write :: register {
-        active;
-        address[32];
-        data[32];
-    }
-
-    sequential (clock) if !reset {
-        if opcode == Opcode.OP || opcode == Opcode.OP_IMM {
-            register_file[rd] <= alu_result;
-        }
-
-        if opcode == Opcode.LUI {
-            register_file[rd] <= imm;
-        }
-
-        if opcode == Opcode.AUIPC {
-            register_file[rd] <=,trunc imm + pc;
-        }
-
-        if opcode == Opcode.STORE {
-            write <= { 1'b1, alu_result, rs1 };
-        } else {
-            write <= 0;
+    sequential (clock) {
+        if !reset && mode == Mode.EXECUTE {
+            switch (opcode) {
+                case Opcode.OP      register_file[rd] <= alu_result;
+                case Opcode.OP_IMM  register_file[rd] <= alu_result;
+                case Opcode.LUI     register_file[rd] <= imm;
+                case Opcode.AUIPC   register_file[rd] <=,trunc imm + pc;
+            }
         }
     }
 
@@ -120,46 +117,58 @@ Processor :: module (
         rd  = instruction.dest_reg;
         rs1 = register_file[instruction.src_reg1];
         rs2 = register_file[instruction.src_reg2];
-
-        if last_cycle_was_load {
-            // If a load started on the previous cycle, and the destination register is a source register in this cycle,
-            // point rs* to data_in because the loaded data is not in the register file yet.
-
-            if last_load_destination == instruction.src_reg1 {
-                rs1 = data_in;
-            }
-
-            if last_load_destination == instruction.src_reg2 {
-                rs2 = data_in;
-            }
-        }
     }
 
 
 
-    Memory_Read :: register {
-        active;
+    Memory_Access_Type :: enum [2] {
+        NONE; LOAD; STORE;
+    }
+
+    Memory_Access :: register {
+        type[Memory_Access_Type];
         address[32];
+        data[32];
+        write_enable[4];
     }
+
+    byte_offset: wire[4];
+    offset:      wire[8];
 
     combinational {
-        read.active = opcode == Opcode.LOAD;
-        read.address = alu_result;
-    }
+        memory_access.type = Memory_Access_Type.NONE;
+        memory_access.write_enable = 4'b0;
 
-    last_cycle_was_load: flipflop;
-    last_load_destination: flipflop[5];
+        byte_offset[1:0] = alu_result[1:0];
+        offset           = byte_offset * 8;
 
-    sequential (clock) {
-        if opcode == Opcode.LOAD {
-            last_cycle_was_load <= 1'b1;
-            last_load_destination <= rd;
-        } else {
-            last_cycle_was_load <= 1'b0;
+        if mode == Mode.EXECUTE switch opcode {
+            case Opcode.LOAD {
+                memory_access.type = Memory_Access_Type.LOAD;
+            }
+
+            case Opcode.STORE {
+                memory_access.type = Memory_Access_Type.STORE;
+
+                switch instruction.funct3 {
+                    case Funct.STORE_SB memory_access.write_enable = 4'b0001 << byte_offset;
+                    case Funct.STORE_SH memory_access.write_enable = 4'b0011 << byte_offset;
+                    case Funct.STORE_SW memory_access.write_enable = 4'b1111;
+                }
+            }
         }
 
-        if last_cycle_was_load {
-            register_file[rd] <= data_in;
+        memory_access.address = { alu_result[31:2], 2'b0 };
+        memory_access.data = rs2 << offset;
+    }
+
+    sequential (clock) if mode == Mode.MEMORY {
+        if opcode == Opcode.LOAD switch instruction.funct3 {
+            case Funct.LOAD_LB  register_file[rd][7:0] <= data_in[offset +: 8];
+            case Funct.LOAD_LH  register_file[rd] <= { 16 # data_in[16 + offset +: 1], data_in[offset +: 16] };
+            case Funct.LOAD_LW  register_file[rd] <= data_in;
+            case Funct.LOAD_LBU register_file[rd] <= { 24'b0, data_in[offset +: 8] };
+            case Funct.LOAD_LHU register_file[rd] <= { 16'b0, data_in[offset +: 16] };
         }
     }
 
@@ -186,26 +195,28 @@ Processor :: module (
             alu_rhs = rs2;
         }
 
+        alu_result =,trunc alu_lhs + alu_rhs;
+
         funct7 = instruction.funct7 > 0;
 
         if opcode == Opcode.OP || opcode == Opcode.OP_IMM {
             switch instruction.funct3 {
                 case Funct.OP_ADD_SUB
-                    if funct7      alu_result = alu_lhs  -  alu_rhs;
+                    if funct7      alu_result       = alu_lhs  -  alu_rhs;
                     else           alu_result =,trunc alu_lhs  +  alu_rhs;
                 case Funct.OP_SRL_SRA
-                    if funct7      alu_result = alu_lhs >>  alu_rhs;
-                    else           alu_result = 32'b0; // alu_lhs >>> alu_rhs;
-                case Funct.OP_SLL  alu_result = alu_lhs  << alu_rhs;
-                case Funct.OP_SLT  alu_result[0] = alu_lhs  <  alu_rhs; // Todo: sign
-                case Funct.OP_SLTU alu_result[0] = alu_lhs  <  alu_rhs;
-                case Funct.OP_XOR  alu_result = alu_lhs  ^  alu_rhs;
-                case Funct.OP_OR   alu_result = alu_lhs  |  alu_rhs;
-                case Funct.OP_AND  alu_result = alu_lhs  &  alu_rhs;
+                    if funct7      alu_result       = alu_lhs >>  alu_rhs;
+                    else           alu_result       = 32'b0;               // Todo: arithmetic shift
+                case Funct.OP_SLL  alu_result       = alu_lhs  << alu_rhs;
+                case Funct.OP_SLT  alu_result[0]    = alu_lhs  <  alu_rhs; // Todo: sign
+                case Funct.OP_SLTU alu_result[0]    = alu_lhs  <  alu_rhs;
+                case Funct.OP_XOR  alu_result       = alu_lhs  ^  alu_rhs;
+                case Funct.OP_OR   alu_result       = alu_lhs  |  alu_rhs;
+                case Funct.OP_AND  alu_result       = alu_lhs  &  alu_rhs;
             }
         }
 
-        if opcode == Opcode.BRANCH switch instruction.funct3 {
+        else if opcode == Opcode.BRANCH switch instruction.funct3 {
             case Funct.BRANCH_BEQ  alu_result = { 31'b0, alu_lhs == alu_rhs };
             case Funct.BRANCH_BNE  alu_result = { 31'b0, alu_lhs != alu_rhs };
             case Funct.BRANCH_BLT  alu_result = { 31'b0, alu_lhs <  alu_rhs }; // Todo: sign
@@ -216,18 +227,25 @@ Processor :: module (
     }
 }
 
-Controller :: module (clock: wire) {
-    processor: Processor;
+// Controller :: module (clock: wire, reset: wire) {
+//     processor: Processor(clock, reset);
+// 
+//     data_memory:        Memory(clock);
+//     instruction_memory: Memory(clock);
+// 
+//     combinational {
+//         processor.data_in     = data_memory.output;
+//         processor.instruction = instr_memory.output;
+// 
+//         data_memory.address   = processor.write.address;
+//         data_memory.input     = processor.write.data;
+// 
+//         instr_memory.address  = processor.pc;
+//     }
+// }
 
-    data_memory: Memory;
-    instruction_memory: Memory;
 
-    combinational {
-        processor.clock = clock;
-    }
-}
-
-Memory :: module (clock: wire, wr_en: wire[4], store: wire[Word], address: wire[32]) -> (load: flipflop[32]) {
+Memory :: module (clock: wire, wr_en: wire[4], input: wire[Word], address: wire[32]) -> (output: flipflop[32]) {
     Word :: register {
         byte_0[8];
         byte_1[8];
@@ -238,12 +256,12 @@ Memory :: module (clock: wire, wr_en: wire[4], store: wire[Word], address: wire[
     mem: ['h400] memory[Word];
 
     sequential (clock) {
-        if wr_en[0] mem[address].byte_0 <= store.byte_0;
-        if wr_en[1] mem[address].byte_1 <= store.byte_1;
-        if wr_en[2] mem[address].byte_2 <= store.byte_2;
-        if wr_en[3] mem[address].byte_3 <= store.byte_3;
+        if wr_en[0] mem[address].byte_0 <= input.byte_0;
+        if wr_en[1] mem[address].byte_1 <= input.byte_1;
+        if wr_en[2] mem[address].byte_2 <= input.byte_2;
+        if wr_en[3] mem[address].byte_3 <= input.byte_3;
 
-        load <= mem[address];
+        output <= mem[address];
     }
 }
 
