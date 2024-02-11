@@ -306,8 +306,8 @@ generate_expression :: (expr: *Ast_Node) {
         generate_expression(sel.left);
         if sel.select_type == {
             case .RANGE; write_verilog(":");
-            case .POSITIVE_FIXED_WIDTH; write_verilog("+:");
-            case .NEGATIVE_FIXED_WIDTH; write_verilog("-:");
+            case .POSITIVE_FIXED_WIDTH; write_verilog(" +: ");
+            case .NEGATIVE_FIXED_WIDTH; write_verilog(" -: ");
         }
         generate_expression(sel.right);
 
