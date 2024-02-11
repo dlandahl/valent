@@ -87,15 +87,31 @@ generate_module :: (decl: *Ast_Declaration) {
             write_verilog(");\n");
         }
     }
+    context.verilog.indentation_level -= 1;
 
-    for module.statements {
-        if it.kind != .DECLARATION {
-            generate_statement(it);
+    generate_block(module, true);
+
+    write_verilog("endmodule\n");
+}
+
+generate_block :: (block: *Ast_Block, skip_decls: bool = false) {
+    context.verilog.indentation_level += 1;
+
+    last_was_block: bool;
+    for block.statements {
+        if it.kind == .DECLARATION && skip_decls continue;
+
+        if it_index != 0 {
+            if it.kind == .IF || it.kind == .SWITCH write_verilog("\n");
+        }
+
+        generate_statement(it);
+
+        if it_index != block.statements.count-1 {
+            if it.kind == .IF || it.kind == .SWITCH write_verilog("\n");
         }
     }
     context.verilog.indentation_level -= 1;
-
-    write_verilog("endmodule\n");
 }
 
 generate_statement :: (stmt: *Ast_Node) {
@@ -129,11 +145,7 @@ generate_statement :: (stmt: *Ast_Node) {
         seq := cast(*Ast_Sequential_Circuit) stmt;
         write_verilog("always @ (posedge %) begin\n", seq.clock.name);
 
-        context.verilog.indentation_level += 1;
-        for seq.block.statements {
-            generate_statement(it);
-        }
-        context.verilog.indentation_level -= 1;
+        generate_block(seq.block);
 
         write_verilog("\nend\n");
 
@@ -145,13 +157,11 @@ generate_statement :: (stmt: *Ast_Node) {
             write_verilog("begin\n");
         }
 
-        context.verilog.indentation_level += 1;
-        for comb.block.statements {
-            generate_statement(it);
-        }
-        context.verilog.indentation_level -= 1;
+        generate_block(comb.block);
 
-        if comb.block.statements.count > 1 write_verilog("\nend");
+        if comb.block.statements.count > 1 {
+            write_verilog("\nend");
+        }
         write_verilog("\n");
 
       case .ASSIGNMENT;
@@ -173,22 +183,12 @@ generate_statement :: (stmt: *Ast_Node) {
         generate_expression(_if.condition);
         write_verilog(") begin\n");
 
-        context.verilog.indentation_level += 1;
-
-        for _if.block.statements {
-            generate_statement(it);
-        }
-
-        context.verilog.indentation_level -= 1;
+        generate_block(_if.block);
 
         if _if.else_block {
             write_verilog("end else begin\n");
 
-            context.verilog.indentation_level += 1;
-            for _if.else_block.statements {
-                generate_statement(it);
-            }
-            context.verilog.indentation_level -= 1;
+            generate_block(_if.else_block);
         }
 
         write_verilog("end\n");
@@ -207,11 +207,7 @@ generate_statement :: (stmt: *Ast_Node) {
             
             if it.block.statements.count > 1 write_verilog("begin\n");
 
-            context.verilog.indentation_level += 1;
-            for it.block.statements {
-                generate_statement(it);
-            }
-            context.verilog.indentation_level -= 1;
+            generate_block(it.block);
 
             if it.block.statements.count > 1 write_verilog("end\n");
         }
@@ -308,7 +304,11 @@ generate_expression :: (expr: *Ast_Node) {
         sel := cast(*Ast_Bit_Select) expr;
 
         generate_expression(sel.left);
-        write_verilog(":");
+        if sel.select_type == {
+            case .RANGE; write_verilog(":");
+            case .POSITIVE_FIXED_WIDTH; write_verilog("+:");
+            case .NEGATIVE_FIXED_WIDTH; write_verilog("-:");
+        }
         generate_expression(sel.right);
 
       case .CONCAT;

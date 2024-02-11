@@ -23,11 +23,11 @@ my_circuit :: combinational <width: constant> (x: wire) -> (y: wire, z: wire[wid
 }
 
 Vga_Signal :: register {
-    colors: register {
+    colors[register {
         vga_red   [3];
         vga_green [3];
         vga_blue  [3];
-    };
+    }];
 
     hsync;
     vsync;

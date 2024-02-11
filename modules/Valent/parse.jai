@@ -649,8 +649,16 @@ parse_indexing_brackets :: (left: *Ast_Node) -> *Ast_Binary_Op {
     op.left = left;
     op.right = parse_expression();
 
-    if allow(.COLON) {
+    if allow(.COLON, .POSITIVE_SELECT, .NEGATIVE_SELECT) {
         sel := Make_Ast(Ast_Bit_Select);
+
+        if current_token().kind == {
+            case .POSITIVE_SELECT; sel.select_type = .POSITIVE_FIXED_WIDTH;
+            case .NEGATIVE_SELECT; sel.select_type = .NEGATIVE_FIXED_WIDTH;
+            case .COLON;           sel.select_type = .RANGE;
+            case; assert(false);
+        }
+
         sel.left = op.right;
         op.right = sel;
         sel.right = parse_expression();
@@ -1073,7 +1081,6 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
     if current() == {
       case #char ","; Emit(.COMMA);
       case #char "."; Emit(.OPERATOR_DOT);
-      case #char "+"; Emit(.OPERATOR_ADD);
       case #char ";"; Emit(.SEMICOLON);
       case #char "#"; Emit(.OPERATOR_REPEAT);
       case #char "*"; Emit(.OPERATOR_MULTIPLY);
@@ -1097,6 +1104,14 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
             Emit(.OPERATOR_BIT_OR);
         }
 
+      case #char "+";
+        cursor += 1;
+        if current() == #char ":"  Emit(.POSITIVE_SELECT);
+        else {
+            cursor -= 1;
+            Emit(.OPERATOR_ADD);
+        }
+
       case #char "!";
         cursor += 1;
         if current() == #char "="  Emit(.OPERATOR_NOT_EQUAL);
@@ -1115,7 +1130,8 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
 
       case #char "-";
         cursor += 1;
-        if current() == #char ">"  Emit(.ARROW);
+        if      current() == #char ">"  Emit(.ARROW);
+        else if current() == #char ":"  Emit(.NEGATIVE_SELECT);
         else {
             cursor -= 1;
             Emit(.OPERATOR_SUBTRACT);

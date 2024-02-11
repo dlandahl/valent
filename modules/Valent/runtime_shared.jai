@@ -314,6 +314,8 @@ Token_Kind :: enum {
     _END_OPERATORS;
 
     COLON;
+    POSITIVE_SELECT;
+    NEGATIVE_SELECT;
     COMMA;
     SEMICOLON;
     EQUALS;
