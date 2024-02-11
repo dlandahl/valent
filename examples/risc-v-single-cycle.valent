@@ -6,7 +6,7 @@ Processor :: module (
     data_in: wire[32]
 ) -> (
     pc: flipflop[32],
-    memory_access: wire[Memory_Access],
+    bus: wire[Memory_Interface],
 ) {
 
     Mode :: enum [1] { EXECUTE; MEMORY; }
@@ -18,8 +18,6 @@ Processor :: module (
         if reset mode <= Mode.EXECUTE;
         else     mode <= !mode;
     }
-
-
 
     RiscV_Instruction :: register[32] {
         opcode    [Opcode];
@@ -121,45 +119,25 @@ Processor :: module (
 
 
 
-    Memory_Access_Type :: enum [2] {
-        NONE; LOAD; STORE;
-    }
-
-    Memory_Access :: register {
-        type[Memory_Access_Type];
-        address[32];
-        data[32];
-        write_enable[4];
-    }
-
     byte_offset: wire[4];
     offset:      wire[8];
 
     combinational {
-        memory_access.type = Memory_Access_Type.NONE;
-        memory_access.write_enable = 4'b0;
+        bus.write_enable = 4'b0;
 
         byte_offset[1:0] = alu_result[1:0];
         offset           = byte_offset * 8;
 
-        if mode == Mode.EXECUTE switch opcode {
-            case Opcode.LOAD {
-                memory_access.type = Memory_Access_Type.LOAD;
-            }
-
-            case Opcode.STORE {
-                memory_access.type = Memory_Access_Type.STORE;
-
-                switch instruction.funct3 {
-                    case Funct.STORE_SB memory_access.write_enable = 4'b0001 << byte_offset;
-                    case Funct.STORE_SH memory_access.write_enable = 4'b0011 << byte_offset;
-                    case Funct.STORE_SW memory_access.write_enable = 4'b1111;
-                }
+        if mode == Mode.EXECUTE && opcode == Opcode.STORE {
+            switch instruction.funct3 {
+                case Funct.STORE_SB bus.write_enable = 4'b0001 << byte_offset;
+                case Funct.STORE_SH bus.write_enable = 4'b0011 << byte_offset;
+                case Funct.STORE_SW bus.write_enable = 4'b1111;
             }
         }
 
-        memory_access.address = { alu_result[31:2], 2'b0 };
-        memory_access.data = rs2 << offset;
+        bus.address = { alu_result[31:2], 2'b0 };
+        bus.data = rs2 << offset;
     }
 
     sequential (clock) if mode == Mode.MEMORY {
@@ -227,41 +205,47 @@ Processor :: module (
     }
 }
 
-// Controller :: module (clock: wire, reset: wire) {
-//     processor: Processor(clock, reset);
-// 
-//     data_memory:        Memory(clock);
-//     instruction_memory: Memory(clock);
-// 
-//     combinational {
-//         processor.data_in     = data_memory.output;
-//         processor.instruction = instr_memory.output;
-// 
-//         data_memory.address   = processor.write.address;
-//         data_memory.input     = processor.write.data;
-// 
-//         instr_memory.address  = processor.pc;
-//     }
-// }
+Controller :: module (clock: wire, reset: wire) {
 
+    processor: Processor(clock, reset);
 
-Memory :: module (clock: wire, wr_en: wire[4], input: wire[Word], address: wire[32]) -> (output: flipflop[32]) {
-    Word :: register {
-        byte_0[8];
-        byte_1[8];
-        byte_2[8];
-        byte_3[8];
+    data_memory: Block_Ram(clock);
+
+    combinational {
+        data_memory.bus = processor.bus;
+        processor.data_in = data_memory.output;
     }
 
-    mem: ['h400] memory[Word];
+    instruction_memory: Block_Ram(clock);
+
+    combinational {
+        instruction_memory.bus.address = processor.pc;
+        instruction_memory.bus.write_enable = 4'b0;
+
+        processor.instruction = instruction_memory.output;
+    }
+}
+
+Memory_Interface :: register {
+    address[32];
+    data[32];
+    write_enable[4];
+}
+
+Block_Ram :: module (clock: wire, bus: wire[Memory_Interface]) -> output: flipflop[32] {
+
+    storage: ['h400] memory[32];
+
+    native_address: wire[30];
+    combinational native_address = (bus.address)[31:2];
 
     sequential (clock) {
-        if wr_en[0] mem[address].byte_0 <= input.byte_0;
-        if wr_en[1] mem[address].byte_1 <= input.byte_1;
-        if wr_en[2] mem[address].byte_2 <= input.byte_2;
-        if wr_en[3] mem[address].byte_3 <= input.byte_3;
+        if (bus.write_enable)[0] storage[bus.address][7:0]   <= (bus.data)[7:0];
+        if (bus.write_enable)[1] storage[bus.address][15:8]  <= (bus.data)[15:8];
+        if (bus.write_enable)[2] storage[bus.address][23:16] <= (bus.data)[23:16];
+        if (bus.write_enable)[3] storage[bus.address][31:24] <= (bus.data)[31:24];
 
-        output <= mem[address];
+        output <= storage[bus.address];
     }
 }
 

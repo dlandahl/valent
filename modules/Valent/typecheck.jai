@@ -3,29 +3,6 @@
 
 #import "Hash_Table";
 
-// typecheck :: (top_level: *Ast_Block, top: string) -> *Ast_Declaration {
-// 
-//     for top_level.statements {
-//         // Todo: check for duplicate names at top level
-//         assert(it.kind == .DECLARATION);
-// 
-//         decl := cast(*Ast_Declaration) it;
-//         if decl.name == top {
-//             assert(decl.initialisation_value.kind == .MODULE);
-// 
-//             decl.datatype.primitive = .MODULE;
-//             decl.typechecked = true;
-// 
-//             typecheck_module(cast(*Ast_Module) decl.initialisation_value);
-//             return decl;
-//         }
-//     }
-// 
-//     semantic_error(top_level, "top module '%' was not found in the provided program", top);
-// 
-//     return null;
-// }
-
 typecheck_module :: (module: *Ast_Module) {
     assert(module.constant_parameters.count == 0, "To do");
     context.typechecker.current_block = module;
@@ -120,21 +97,6 @@ typecheck_block :: (block: *Ast_Block) {
                     semantic_error(ass, "Assignments in combinational blocks must be combinational assignments (=)\n\n%", node_location_string(ass));
                 case; assert(false);
             }
-
-            /*
-            lhs_type: Datatype;
-            if ass.target.kind == .IDENTIFIER {
-                ident := cast(*Ast_Identifier) ass.target;
-
-                resolve_identifier(ident);
-
-                lhs_type = ident.resolved_declaration.datatype;
-            } else if ass.target.kind == .CONCAT {
-                typecheck_expression(ass.target);
-                // Todo: check this is only 0/Z literals and wire or flipflop idents depending on block type
-                lhs_type = ass.target.datatype;
-            }
-            */
 
             typecheck_expression(ass.target);
 
@@ -274,8 +236,8 @@ typecheck_expression :: (expr: *Ast_Node) {
         typecheck_expression(op.left);
 
         if op.operation == .OPERATOR_DOT {
-            if op.left.datatype.primitive != .ENUM && !op.left.datatype.register_def {
-                semantic_error(op, "Dot dereference (.) used on type '%', but only works on enums or registers.\n\n%", op.left.datatype.primitive, node_location_string(op));
+            if op.left.datatype.primitive != .ENUM && !op.left.datatype.register_def && op.left.datatype.primitive != .MODULE {
+                semantic_error(op, "Dot dereference (.) used on type '%', but only works on enums, registers, and modules.\n\n%", op.left.datatype.primitive, node_location_string(op));
             }
 
             if op.right.kind != .IDENTIFIER {
@@ -318,6 +280,36 @@ typecheck_expression :: (expr: *Ast_Node) {
                 op.datatype.enum_def = field.enum_def;
                 op.datatype.register_def = field.register_def;
 
+            } else if op.left.datatype.primitive == .MODULE {
+                assert(op.left.kind == .IDENTIFIER);
+                module_inst_name := cast(*Ast_Identifier) op.left;
+
+                resolve_identifier(module_inst_name);
+                module_inst := cast(*Ast_Module_Inst) module_inst_name.resolved_declaration.type_expression;
+
+                resolve_identifier(module_inst.ident);
+                module := cast(*Ast_Module) module_inst.ident.resolved_declaration.initialisation_value;
+
+                io_decl: *Ast_Declaration;
+
+                for module.inputs if it.name == ident.name {
+                    io_decl = it;
+                    break;
+                }
+
+                if !io_decl {
+                    for module.outputs if it.name == ident.name {
+                        io_decl = it;
+                        break;
+                    }
+                }
+
+                if !io_decl semantic_error(op.left, "Could not find the port '%' on module '%'", ident.name, module_inst.ident.name);
+
+                op.datatype.primitive = .WIRE;
+                op.datatype.bit_width = io_decl.datatype.bit_width;
+
+                // for 
             } else {
                 assert(false);
             }
@@ -434,13 +426,13 @@ typecheck_module_instantiation :: (module: *Ast_Module_Inst) {
     decl := cast(*Ast_Module) module.ident.resolved_declaration.initialisation_value;
     assert(decl.kind == .MODULE);
 
-    if module.inputs.count != decl.inputs.count {
-        semantic_error(module, "Module '%' expects % inputs, but % are provided here:\n\n%\n\nDeclared here:\n\n%", module.ident.name, decl.inputs.count, module.inputs.count, node_location_string(module), node_location_string(decl));
-    }
-
-    if module.outputs.count != decl.outputs.count {
-        semantic_error(module, "Module '%' expects % outputs, but % are provided here:\n\n%\n\nDeclared here:\n\n%", module.ident.name, decl.outputs.count, module.outputs.count, node_location_string(module), node_location_string(decl));
-    }
+    //if module.inputs.count != decl.inputs.count {
+    //    semantic_error(module, "Module '%' expects % inputs, but % are provided here:\n\n%\n\nDeclared here:\n\n%", module.ident.name, decl.inputs.count, module.inputs.count, node_location_string(module), node_location_string(decl));
+    //}
+//
+//    if module.outputs.count != decl.outputs.count {
+//        semantic_error(module, "Module '%' expects % outputs, but % are provided here:\n\n%\n\nDeclared here:\n\n%", module.ident.name, decl.outputs.count, module.outputs.count, node_location_string(module), node_location_string(decl));
+//    }
 
     for *module.inputs {
         resolve_identifier(it);
@@ -476,7 +468,6 @@ check_bit_width :: (ast: *Ast_Node, left: Datatype, right: Datatype) -> int {
 }
 
 
-// Evaluate a bit-width expression. These are found in square brackets in type declarations. Width can come from a register/enum type name, or a constant expression that gives a number
 evaluate_width_expression :: (expr: *Ast_Node) -> int, *Enum_Def, *Register_Def {
     typecheck_expression(expr);
 
@@ -525,7 +516,6 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
         evaluate_type_expression(decl.type_expression);
         decl.datatype = decl.type_expression.datatype;
     } else {
-        // Infer the type from the value
         typecheck_expression(decl.initialisation_value);
         decl.datatype = decl.initialisation_value.datatype;
     }
