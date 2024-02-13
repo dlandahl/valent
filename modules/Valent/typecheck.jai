@@ -241,7 +241,7 @@ typecheck_expression :: (expr: *Ast_Node) {
             }
 
             if op.right.kind != .IDENTIFIER {
-                semantic_error(op, "Expected an identifier to the right of dot dereference (.).\n\n%", node_location_string(op));
+                semantic_error(op, "Expected an identifier to the right of dot dereference (.):\n\n%", node_location_string(op));
             }
 
             ident := cast(*Ast_Identifier) op.right;
@@ -304,12 +304,10 @@ typecheck_expression :: (expr: *Ast_Node) {
                     }
                 }
 
-                if !io_decl semantic_error(op.left, "Could not find the port '%' on module '%'", ident.name, module_inst.ident.name);
+                if !io_decl semantic_error(op.left, "Could not find the port '%' on module '%', referenced here:\n\n%", ident.name, module_inst.ident.name, node_location_string(op));
 
-                op.datatype.primitive = .WIRE;
-                op.datatype.bit_width = io_decl.datatype.bit_width;
-
-                // for 
+                op.datatype = io_decl.datatype;
+                op.datatype.module_input = false;
             } else {
                 assert(false);
             }

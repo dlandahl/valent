@@ -34,7 +34,9 @@ generate_module :: (decl: *Ast_Declaration) {
         if it.datatype.bit_width > 1 {
             write_verilog("[%:0] ", it.datatype.bit_width-1);
         }
-        write_verilog("%,\n", it.name);
+        write_verilog("%", it.name);
+        if it_index != module.inputs.count-1 || module.outputs.count write_verilog(",");
+        write_verilog("\n");
     }
 
     for module.outputs {
@@ -70,21 +72,64 @@ generate_module :: (decl: *Ast_Declaration) {
             instance := cast(*Ast_Module_Inst) decl.type_expression;
             source := cast(*Ast_Declaration) instance.ident.resolved_declaration;
 
+            module := cast(*Ast_Module) source.initialisation_value;
+
+            write_bus_width :: (bus: *Ast_Declaration) {
+                if bus.datatype.bit_width > 1 write_verilog("[%:0] ", bus.datatype.bit_width-1);
+            }
+
+            for module.inputs {
+                if it_index < instance.inputs.count continue;
+
+                write_verilog("reg ");
+                write_bus_width(it);
+                write_verilog("%__%;\n", decl.name, it.name);
+            }
+
+            for module.outputs {
+                if it_index < instance.outputs.count continue;
+
+                write_verilog("reg ");
+                write_bus_width(it);
+                write_verilog("%__%;\n", decl.name, it.name);
+
+                write_verilog("wire ");
+                write_bus_width(it);
+                write_verilog("__%__%;\n", decl.name, it.name);
+                write_verilog("always @* %1__%2 = __%1__%2;\n", decl.name, it.name);
+            }
+
             write_verilog("% %(", instance.ident.name, decl.name);
 
             for instance.inputs {
                 write_verilog(it.name);
-                if it_index != instance.inputs.count-1 || instance.outputs.count {
+                if it_index != module.inputs.count-1 || module.outputs.count {
+                    write_verilog(", ");
+                }
+            }
+
+            for module.inputs {
+                if it_index < instance.inputs.count continue;
+
+                write_verilog("%__%", decl.name, it.name);
+                if it_index != module.inputs.count-1 || module.outputs.count {
                     write_verilog(", ");
                 }
             }
 
             for instance.outputs {
                 write_verilog(it.name);
-                if it_index != instance.outputs.count-1 write_verilog(", ");
+                if it_index != module.outputs.count-1 write_verilog(", ");
             }
 
-            write_verilog(");\n");
+            for module.outputs {
+                if it_index < instance.outputs.count continue;
+
+                write_verilog("%__%", decl.name, it.name);
+                if it_index != module.outputs.count-1 write_verilog(", ");
+            }
+
+            write_verilog(");\n\n");
         }
     }
     context.verilog.indentation_level -= 1;
@@ -143,7 +188,7 @@ generate_statement :: (stmt: *Ast_Node) {
 
       case .SEQUENTIAL_CIRCUIT;
         seq := cast(*Ast_Sequential_Circuit) stmt;
-        write_verilog("always @ (posedge %) begin\n", seq.clock.name);
+        write_verilog("always @(posedge %) begin\n", seq.clock.name);
 
         generate_block(seq.block);
 
@@ -219,7 +264,10 @@ generate_statement :: (stmt: *Ast_Node) {
     }
 }
 
-generate_expression :: (expr: *Ast_Node) {
+generate_expression :: (expr: *Ast_Node, bit_select_active := false) -> int {
+
+    bit_select_base_offset: int = -1;
+
     if expr.kind == {
       case .LITERAL;
         lit := cast(*Ast_Literal) expr;
@@ -240,9 +288,33 @@ generate_expression :: (expr: *Ast_Node) {
         op := cast(*Ast_Binary_Op) expr;
 
         if op.operation == .OPEN_BRACKET {
-            generate_expression(op.left);
+            offset := generate_expression(op.left, true);
             write_verilog("[");
-            generate_expression(op.right);
+
+            y := offset != -1;
+
+            if op.right.kind == .BIT_SELECT {
+                sel := cast(*Ast_Bit_Select) op.right;
+
+                if y write_verilog("(");
+                generate_expression(sel.left);
+                if y write_verilog(" + %)", offset);
+
+                if sel.select_type == {
+                    case .RANGE; write_verilog(":");
+                    case .POSITIVE_FIXED_WIDTH; write_verilog(" +: ");
+                    case .NEGATIVE_FIXED_WIDTH; write_verilog(" -: ");
+                }
+
+                if y write_verilog("(");
+                generate_expression(sel.right);
+                if y write_verilog(" + %)", offset);
+            } else {
+                if y write_verilog("(");
+                generate_expression(op.right);
+                if y write_verilog(" + %)", offset);
+            }
+
             write_verilog("]");
 
         } else if op.operation == .OPERATOR_DOT {
@@ -267,7 +339,22 @@ generate_expression :: (expr: *Ast_Node) {
 
                 assert(field != null);
                 generate_expression(op.left);
-                write_verilog("[%:%]", field_start_bit + field.width - 1, field_start_bit);
+
+                if !bit_select_active {
+                    write_verilog("[%:%]", field_start_bit + field.width - 1, field_start_bit);
+                } else {
+                    // If bit-select is active, that means that the parent expression in the AST is already doing this [x:y] index. Chaining them is not allowed in Verilog, so instead of generating the code here, we send information upwards that the first bit-select can use to make the correct expression.
+                    bit_select_base_offset = field_start_bit;
+                    // The width doesn't matter because it's overruled by whatever the parent bit-select does.
+                }
+            } else if op.left.datatype.primitive == .MODULE {
+                assert(op.left.kind == .IDENTIFIER);
+                assert(op.right.kind == .IDENTIFIER);
+
+                mod := cast(*Ast_Identifier) op.left;
+                port := cast(*Ast_Identifier) op.right;
+
+                write_verilog("%__%", mod.name, port.name);
             } else {
                 assert(false);
             }
@@ -300,17 +387,6 @@ generate_expression :: (expr: *Ast_Node) {
             write_verilog(id.name);
         }
 
-      case .BIT_SELECT;
-        sel := cast(*Ast_Bit_Select) expr;
-
-        generate_expression(sel.left);
-        if sel.select_type == {
-            case .RANGE; write_verilog(":");
-            case .POSITIVE_FIXED_WIDTH; write_verilog(" +: ");
-            case .NEGATIVE_FIXED_WIDTH; write_verilog(" -: ");
-        }
-        generate_expression(sel.right);
-
       case .CONCAT;
         cat := cast(*Ast_Concat) expr;
         write_verilog("{ ");
@@ -323,6 +399,8 @@ generate_expression :: (expr: *Ast_Node) {
 
       case; assert(false);
     }
+
+    return bit_select_base_offset;
 }
 
 write_verilog :: (code: string, format: .. Any, do_indent := true) {

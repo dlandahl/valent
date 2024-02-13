@@ -21,11 +21,13 @@
     // return;
 
     riscv := read_entire_file("examples/risc-v-single-cycle.valent");
+
     p, success := compile(riscv);
     if !success return;
 
-    if !generate_verilog(p, "Processor") print("Top is wrong\n");
-    // #if OS != .LINUX create_rtlil_design(p, "Sim_Test");
+    generate_verilog(p, "Processor");
+    generate_verilog(p, "Block_Ram");
+    generate_verilog(p, "Controller");
 }
 
 TEST_PROGRAM :: #string END

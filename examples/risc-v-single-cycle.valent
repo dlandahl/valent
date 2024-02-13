@@ -180,17 +180,17 @@ Processor :: module (
         if opcode == Opcode.OP || opcode == Opcode.OP_IMM {
             switch instruction.funct3 {
                 case Funct.OP_ADD_SUB
-                    if funct7      alu_result       = alu_lhs  -  alu_rhs;
-                    else           alu_result =,trunc alu_lhs  +  alu_rhs;
+                    if funct7      alu_result       = alu_lhs -  alu_rhs;
+                    else           alu_result =,trunc alu_lhs +  alu_rhs;
                 case Funct.OP_SRL_SRA
-                    if funct7      alu_result       = alu_lhs >>  alu_rhs;
+                    if funct7      alu_result       = alu_lhs >> alu_rhs;
                     else           alu_result       = 32'b0;               // Todo: arithmetic shift
-                case Funct.OP_SLL  alu_result       = alu_lhs  << alu_rhs;
-                case Funct.OP_SLT  alu_result[0]    = alu_lhs  <  alu_rhs; // Todo: sign
-                case Funct.OP_SLTU alu_result[0]    = alu_lhs  <  alu_rhs;
-                case Funct.OP_XOR  alu_result       = alu_lhs  ^  alu_rhs;
-                case Funct.OP_OR   alu_result       = alu_lhs  |  alu_rhs;
-                case Funct.OP_AND  alu_result       = alu_lhs  &  alu_rhs;
+                case Funct.OP_SLL  alu_result       = alu_lhs << alu_rhs;
+                case Funct.OP_SLT  alu_result[0]    = alu_lhs <  alu_rhs; // Todo: sign
+                case Funct.OP_SLTU alu_result[0]    = alu_lhs <  alu_rhs;
+                case Funct.OP_XOR  alu_result       = alu_lhs ^  alu_rhs;
+                case Funct.OP_OR   alu_result       = alu_lhs |  alu_rhs;
+                case Funct.OP_AND  alu_result       = alu_lhs &  alu_rhs;
             }
         }
 
@@ -206,7 +206,6 @@ Processor :: module (
 }
 
 Controller :: module (clock: wire, reset: wire) {
-
     processor: Processor(clock, reset);
 
     data_memory: Block_Ram(clock);
@@ -240,12 +239,12 @@ Block_Ram :: module (clock: wire, bus: wire[Memory_Interface]) -> output: flipfl
     combinational native_address = (bus.address)[31:2];
 
     sequential (clock) {
-        if (bus.write_enable)[0] storage[bus.address][7:0]   <= (bus.data)[7:0];
-        if (bus.write_enable)[1] storage[bus.address][15:8]  <= (bus.data)[15:8];
-        if (bus.write_enable)[2] storage[bus.address][23:16] <= (bus.data)[23:16];
-        if (bus.write_enable)[3] storage[bus.address][31:24] <= (bus.data)[31:24];
+        if (bus.write_enable)[0] storage[native_address][7:0]   <= (bus.data)[7:0];
+        if (bus.write_enable)[1] storage[native_address][15:8]  <= (bus.data)[15:8];
+        if (bus.write_enable)[2] storage[native_address][23:16] <= (bus.data)[23:16];
+        if (bus.write_enable)[3] storage[native_address][31:24] <= (bus.data)[31:24];
 
-        output <= storage[bus.address];
+        output <= storage[native_address];
     }
 }
 

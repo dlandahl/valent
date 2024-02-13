@@ -319,7 +319,7 @@ parse_statement :: () -> *Ast_Node {
     return null;
 }
 
-parse_lvalue :: () -> *Ast_Node {
+parse_lvalue :: (parsing_dot := false) -> *Ast_Node {
     if peek(.OPEN_BRACE) {
         return parse_concat();
     } else {
@@ -331,6 +331,8 @@ parse_lvalue :: () -> *Ast_Node {
         lhs: *Ast_Node;
         lhs = ident;
 
+        if parsing_dot return lhs;
+
         while true {
             if peek(.OPEN_BRACKET) {
                 lhs = parse_indexing_brackets(lhs);
@@ -338,7 +340,7 @@ parse_lvalue :: () -> *Ast_Node {
                 op := Make_Ast(Ast_Binary_Op);
                 op.operation = .OPERATOR_DOT;
                 op.left = lhs;
-                op.right = parse_lvalue();
+                op.right = parse_lvalue(true);
 
                 lhs = op;
             } else break;
