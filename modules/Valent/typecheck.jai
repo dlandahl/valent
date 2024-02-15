@@ -63,6 +63,11 @@ typecheck_block :: (block: *Ast_Block) {
         for module.outputs             Duplication_Check(it);
     }
 
+    if block.kind == .FOR {
+        _for := cast(*Ast_For) block;
+        Duplication_Check(_for.index);
+    }
+
     using context.typechecker;
     array_add(*block_stack, block);
     current_block = block;
@@ -142,6 +147,16 @@ typecheck_block :: (block: *Ast_Block) {
             if _if.else_block {
                 typecheck_block(_if.else_block);
             }
+
+          case .FOR;
+            _for := cast(*Ast_For) it;
+            evaluate_constant_expression(_for.start_index);
+            evaluate_constant_expression(_for.stop_index);
+
+            _for.index.datatype.primitive = .CONSTANT;
+            _for.index.typechecked = true;
+
+            typecheck_block(*_for.block);
 
           case .SWITCH;
             switch := cast(*Ast_Switch) it;
@@ -488,9 +503,9 @@ evaluate_width_expression :: (expr: *Ast_Node) -> int, *Enum_Def, *Register_Def 
 }
 
 typecheck_declaration :: (decl: *Ast_Declaration) {
-    assert(decl.initialisation_value || decl.type_expression);
-
     if decl.typechecked return;
+
+    assert(decl.initialisation_value || decl.type_expression);
 
     array_add(*context.typechecker.in_progress, decl);
     defer pop(*context.typechecker.in_progress);
@@ -762,7 +777,6 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
             return internal_evaluate(id.resolved_declaration.initialisation_value); // Todo cache
         }
 
-        assert(false);
         semantic_error(expr, "Expected a constant expression, but this can't be constant-evaluated:\n\n%\n", node_location_string(expr));
         return 0;
     }
@@ -780,6 +794,9 @@ resolve_identifier :: (id: *Ast_Identifier) {
             for module.constant_parameters if it.name == name return it;
             for module.inputs if it.name == name return it;
             for module.outputs if it.name == name return it;
+        } else if block.kind == .FOR {
+            _for := cast(*Ast_For) block;
+            if name == _for.index.name return _for.index;
         }
 
         for block.statements {

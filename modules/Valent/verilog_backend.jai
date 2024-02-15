@@ -54,6 +54,8 @@ generate_module :: (decl: *Ast_Declaration) {
     write_verilog("  );\n\n");
 
     context.verilog.indentation_level += 1;
+    write_verilog("integer i;\n");
+
     for module.statements {
         if it.kind != .DECLARATION continue;
 
@@ -125,7 +127,7 @@ generate_module :: (decl: *Ast_Declaration) {
             for module.outputs {
                 if it_index < instance.outputs.count continue;
 
-                write_verilog("%__%", decl.name, it.name);
+                write_verilog("__%__%", decl.name, it.name);
                 if it_index != module.outputs.count-1 write_verilog(", ");
             }
 
@@ -180,11 +182,10 @@ generate_statement :: (stmt: *Ast_Node) {
         write_verilog(decl.name);
 
         if t.primitive == .MEMORY {
-            write_verilog(" [0:%]", t.memory_depth);
-        } else {
-            write_verilog(" = 0");
+            write_verilog(" [0:%];\n", t.memory_depth-1);
+            write_verilog("initial for (i=0; i<%; i=i+1) %[i]", t.memory_depth, decl.name);
         }
-        write_verilog(";\n\n");
+        write_verilog(" = 0;\n\n");
 
       case .SEQUENTIAL_CIRCUIT;
         seq := cast(*Ast_Sequential_Circuit) stmt;

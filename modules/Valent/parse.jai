@@ -72,6 +72,11 @@ check_statement_allowed_in_block :: (ast: *Ast_Node) {
           case .MODULE;
           case .SEQUENTIAL;
             if ast.kind == .IF return true, "";
+            if ast.kind == .FOR return true, "";
+            if ast.kind == .DECLARATION {
+                decl := cast(*Ast_Declaration) ast;
+                if decl.constant return true, "";
+            }
             if ast.kind == .SWITCH return true, "";
             if ast.kind == .ASSIGNMENT {
                 ass := cast(*Ast_Assignment) ast;
@@ -117,6 +122,9 @@ stringify_statement :: (ast: *Ast_Node) -> string {
       case .IF;
         return "If";
 
+      case .FOR;
+        return "For";
+
       case .SWITCH;
         return "Switch";
 
@@ -129,8 +137,7 @@ stringify_statement :: (ast: *Ast_Node) -> string {
         return "Jai Code";
     }
 
-    assert(false);
-    return "";
+    return tprint("%", ast.kind);
 }
 
 operator_info :: Binary_Operator_Info.[
@@ -260,7 +267,7 @@ parse_statement :: () -> *Ast_Node {
         _if := Make_Ast(Ast_If);
         _if.condition = parse_expression();
 
-        // An If statement inherits the block type it's in
+        // Control statements inherit the block type they're in (a sequential block is still sequential under an if, etc.)
         parent := peek(context.parser.block_stack);
         _if.block = parse_block(parent.block_type);
 
@@ -269,6 +276,25 @@ parse_statement :: () -> *Ast_Node {
         }
 
         return _if;
+    }
+
+    if allow(.KEYWORD_for) {
+        _for := Make_Ast(Ast_For);
+
+        expect(.IDENTIFIER);
+        _for.index = Make_Ast(Ast_Declaration);
+        _for.index.name = current_token().string_value;
+
+        expect(.COLON);
+        _for.start_index = parse_expression();
+        expect(.DOTDOT);
+        _for.stop_index  = parse_expression();
+
+        parent := peek(context.parser.block_stack);
+        _for.block = parse_block(parent.block_type);
+        _for.kind = .FOR;
+
+        return _for;
     }
 
     if allow(.KEYWORD_switch) {
@@ -1082,7 +1108,6 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
 
     if current() == {
       case #char ","; Emit(.COMMA);
-      case #char "."; Emit(.OPERATOR_DOT);
       case #char ";"; Emit(.SEMICOLON);
       case #char "#"; Emit(.OPERATOR_REPEAT);
       case #char "*"; Emit(.OPERATOR_MULTIPLY);
@@ -1104,6 +1129,14 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
         else {
             cursor -= 1;
             Emit(.OPERATOR_BIT_OR);
+        }
+
+      case #char ".";
+        cursor += 1;
+        if current() == #char "."  Emit(.DOTDOT);
+        else {
+            cursor -= 1;
+            Emit(.OPERATOR_DOT);
         }
 
       case #char "+";
@@ -1303,6 +1336,7 @@ stringify_token :: (token: Token_Kind) -> string {
       case .OPERATOR_EQUALS;       return "Double Equals (==)";
       case .OPERATOR_LOGICAL_OR;   return "Logical Or (||)";
       case .ARROW;                 return "Arrow (->)";
+      case .DOTDOT;                return "Dot Dot (..)";
       case .OPERATOR_REPEAT;       return "Pound (#)";
       case .IDENTIFIER;            return "Identifier";
       case .INTEGER;               return "Integer";
