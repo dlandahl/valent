@@ -43,6 +43,7 @@ Processor :: module (
 
     op: wire[32];
     combinational {
+
         op = instruction;
 
         I_immediate = { 53 # op[31], op[30:20] };
@@ -129,7 +130,7 @@ Processor :: module (
     combinational {
         bus.write_enable = 8'b0;
 
-        byte_offset = alu_result[3:0];
+        byte_offset = alu_result[2:0];
         offset      = byte_offset * 8;
 
         if mode == Mode.EXECUTE && opcode == Opcode.STORE {
@@ -229,11 +230,19 @@ Controller :: module (clock: wire, reset: wire) {
         instruction_memory.bus.address = processor.pc;
         instruction_memory.bus.write_enable = 8'b0;
 
-        if (processor.pc)[2] {
+        // Because instructions are 32bit but the memory bus is 64bit, the PC will point to the high bits in the instruction bus every other instruction.
+        if high_pc_flag {
             processor.instruction = (instruction_memory.data_out)[63:32];
         } else {
             processor.instruction = (instruction_memory.data_out)[31:0];
         }
+    }
+
+    high_pc_flag: flipflop;
+
+    // Delay the PC low/high toggle so that it lines up with what instruction has actually been fetched yet. After the PC changes it still takes a cycle to load the new instruction.
+    sequential (clock) {
+        high_pc_flag <= (processor.pc)[2];
     }
 }
 

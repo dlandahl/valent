@@ -2,9 +2,9 @@
 PROGRAM :: #string END
 #program_export
 main :: () {
-    f, f_1, f_2: u32 = 1, 1, 0;
+    f, f_1, f_2: u64 = 1, 1, 0;
 
-    sequence: *u32 = cast(*u32)4;
+    sequence: *u64 = cast(*u64)8;
 
     for 0..29 {
         sequence[it] = f;
@@ -55,7 +55,7 @@ build :: () {
     }
 
     compiler_end_intercept(workspace);
-    
+
     run("/home/dlandahl/llvm16/bin/llc -filetype=obj .build/fibonacci.bc -o .build/fibonacci.o -march riscv64 --function-sections");
     run("riscv64-unknown-elf-ld -T linker.lds -o .build/fibonacci_linked.o .build/fibonacci.o");
     run("riscv64-unknown-elf-objcopy -O binary .build/fibonacci_linked.o .build/fibonacci.bin");
@@ -64,6 +64,7 @@ build :: () {
     hex_data := format_hex_words(binary);
 
     write_entire_file("program.mem", hex_data);
+    run("riscv64-unknown-elf-objdump --disassemble=main .build/fibonacci_linked.o");
 
     set_build_options_dc(.{do_output = false});
 }
@@ -76,11 +77,11 @@ format_hex_words :: (binary: [] u8) -> string {
 
     format: FormatInt;
     format.base = 16;
-    format.minimum_digits = 8;
+    format.minimum_digits = 16;
 
-    words: [] u32;
-    words.data = cast(*u32) binary.data;
-    words.count = binary.count / 4;
+    words: [] u64;
+    words.data = cast(*u64) binary.data;
+    words.count = binary.count / 8;
 
     for words {
         format.value = it;
