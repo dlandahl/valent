@@ -510,21 +510,11 @@ parse_declaration :: () -> *Ast_Declaration {
     decl := Make_Ast(Ast_Declaration);
     decl.name = ident.string_value;
 
-    expect(.COLON);
+    allow(.COLON);
+    decl.constant = allow(.COLON);
 
-    if !allow(.COLON) {
-        decl.type_expression = parse_expression();
-
-        if allow(.COLON) {
-            decl.datatype.is_type = peek_type();
-            decl.initialisation_value = parse_expression();
-            decl.constant = true;
-        }
-    } else {
-        decl.datatype.is_type = peek_type();
-        decl.initialisation_value = parse_expression();
-        decl.constant = true;
-    }
+    decl.datatype.is_type = peek_type();
+    decl.expression = parse_expression();
 
     return decl;
 }

@@ -170,6 +170,7 @@ Processor :: module (
         alu_lhs = rs1;
 
         use_immediate = opcode == Opcode.OP_IMM
+                     || opcode == Opcode.OP_IMM_32
                      || opcode == Opcode.LOAD
                      || opcode == Opcode.STORE
                      || opcode == Opcode.JALR;

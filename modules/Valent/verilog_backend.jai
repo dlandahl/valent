@@ -8,7 +8,7 @@
 }
 
 generate_verilog :: (top: *Ast_Declaration) -> string {
-    assert(top.initialisation_value.kind == .MODULE);
+    assert(top.expression.kind == .MODULE);
 
     init_string_builder(*context.verilog.builder);
 
@@ -26,7 +26,7 @@ generate_verilog :: (top: *Ast_Declaration) -> string {
 generate_module :: (decl: *Ast_Declaration) {
     write_verilog("module %(\n", decl.name);
 
-    module := cast(*Ast_Module) decl.initialisation_value;
+    module := cast(*Ast_Module) decl.expression;
 
     for module.inputs {
         write_verilog("    input ");
@@ -60,7 +60,7 @@ generate_module :: (decl: *Ast_Declaration) {
         if it.kind != .DECLARATION continue;
 
         decl := cast(*Ast_Declaration) it;
-        if decl.type_expression && decl.type_expression.kind == .MODULE_INSTANTIATION continue;
+        if decl.expression.kind == .MODULE_INSTANTIATION continue;
 
         generate_statement(it);
     }
@@ -69,12 +69,12 @@ generate_module :: (decl: *Ast_Declaration) {
         if it.kind != .DECLARATION continue;
 
         decl := cast(*Ast_Declaration) it;
-        if decl.type_expression && decl.type_expression.kind == .MODULE_INSTANTIATION {
-            
-            instance := cast(*Ast_Module_Inst) decl.type_expression;
+        if decl.expression.kind == .MODULE_INSTANTIATION {
+            instance := cast(*Ast_Module_Inst) decl.expression;
+
             source := cast(*Ast_Declaration) instance.ident.resolved_declaration;
 
-            module := cast(*Ast_Module) source.initialisation_value;
+            module := cast(*Ast_Module) source.expression;
 
             write_bus_width :: (bus: *Ast_Declaration) {
                 if bus.datatype.bit_width > 1 write_verilog("[%:0] ", bus.datatype.bit_width-1);

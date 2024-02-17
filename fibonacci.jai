@@ -1,6 +1,5 @@
 
 PROGRAM :: #string END
-
 #program_export "main"
 main :: () {
     f, f_1, f_2: u32 = 1, 1, 0;

@@ -9,7 +9,7 @@ generate_rtlil :: (top: *Ast_Declaration) {
     rtlil_initialise_design();
     context.rtlil.current_module = rtlil_add_module(to_c_string(tprint("$%", top.name)));
 
-    module := cast(*Ast_Module) top.initialisation_value;
+    module := cast(*Ast_Module) top.expression;
 
     port_index: s32 = 1;
 

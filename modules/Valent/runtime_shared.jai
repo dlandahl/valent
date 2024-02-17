@@ -37,8 +37,7 @@ Ast_Declaration :: struct {
     node.kind = .DECLARATION;
 
     name: string;
-    type_expression: *Ast_Node;
-    initialisation_value: *Ast_Node;
+    expression: *Ast_Node;
 
     constant: bool;
     module_input: bool;
