@@ -229,7 +229,11 @@ Controller :: module (clock: wire, reset: wire) {
         instruction_memory.bus.address = processor.pc;
         instruction_memory.bus.write_enable = 8'b0;
 
-        processor.instruction = (instruction_memory.data_out)[31:0];
+        if (processor.pc)[2] {
+            processor.instruction = (instruction_memory.data_out)[63:32];
+        } else {
+            processor.instruction = (instruction_memory.data_out)[31:0];
+        }
     }
 }
 

@@ -51,10 +51,10 @@ generate_module :: (decl: *Ast_Declaration) {
         write_verilog("\n");
     }
 
-    write_verilog("  );\n\n");
+    write_verilog("  );\n");
 
     context.verilog.indentation_level += 1;
-    write_verilog("integer i;\n");
+    write_verilog("integer i;\n\n");
 
     for module.statements {
         if it.kind != .DECLARATION continue;
