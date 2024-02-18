@@ -8,20 +8,20 @@ typecheck_module :: (module: *Ast_Module) {
     context.typechecker.current_block = module;
 
     for module.inputs {
-        evaluate_type_expression(it.type_expression);
-        it.datatype = it.type_expression.datatype;
+        evaluate_type_expression(it.expression);
+        it.datatype = it.expression.datatype;
 
-        if it.type_expression.datatype.primitive != .WIRE {
+        if it.expression.datatype.primitive != .WIRE {
             semantic_error(it, "Each input port of a module must a be wire or a bus of wires\n\n%", node_location_string(it));
         }
     }
 
     for module.outputs {
-        evaluate_type_expression(it.type_expression);
-        it.datatype = it.type_expression.datatype;
+        evaluate_type_expression(it.expression);
+        it.datatype = it.expression.datatype;
 
         // Todo: say what the type was
-        if it.type_expression.datatype.primitive != .WIRE && it.type_expression.datatype.primitive != .FLIPFLOP {
+        if it.expression.datatype.primitive != .WIRE && it.expression.datatype.primitive != .FLIPFLOP {
             semantic_error(it, "Each output port of a module must a be wire, a flipflop, or a bus of wires or flipflops\n\n%", node_location_string(it));
         }
     }
@@ -61,6 +61,11 @@ typecheck_block :: (block: *Ast_Block) {
         for module.constant_parameters Duplication_Check(it);
         for module.inputs              Duplication_Check(it);
         for module.outputs             Duplication_Check(it);
+    }
+
+    if block.kind == .FOR {
+        _for := cast(*Ast_For) block;
+        Duplication_Check(_for.index);
     }
 
     using context.typechecker;
@@ -142,6 +147,16 @@ typecheck_block :: (block: *Ast_Block) {
             if _if.else_block {
                 typecheck_block(_if.else_block);
             }
+
+          case .FOR;
+            _for := cast(*Ast_For) it;
+            evaluate_constant_expression(_for.start_index);
+            evaluate_constant_expression(_for.stop_index);
+
+            _for.index.datatype.primitive = .CONSTANT;
+            _for.index.typechecked = true;
+
+            typecheck_block(*_for.block);
 
           case .SWITCH;
             switch := cast(*Ast_Switch) it;
@@ -241,7 +256,7 @@ typecheck_expression :: (expr: *Ast_Node) {
             }
 
             if op.right.kind != .IDENTIFIER {
-                semantic_error(op, "Expected an identifier to the right of dot dereference (.).\n\n%", node_location_string(op));
+                semantic_error(op, "Expected an identifier to the right of dot dereference (.):\n\n%", node_location_string(op));
             }
 
             ident := cast(*Ast_Identifier) op.right;
@@ -285,10 +300,10 @@ typecheck_expression :: (expr: *Ast_Node) {
                 module_inst_name := cast(*Ast_Identifier) op.left;
 
                 resolve_identifier(module_inst_name);
-                module_inst := cast(*Ast_Module_Inst) module_inst_name.resolved_declaration.type_expression;
+                module_inst := cast(*Ast_Module_Inst) module_inst_name.resolved_declaration.expression;
 
                 resolve_identifier(module_inst.ident);
-                module := cast(*Ast_Module) module_inst.ident.resolved_declaration.initialisation_value;
+                module := cast(*Ast_Module) module_inst.ident.resolved_declaration.expression;
 
                 io_decl: *Ast_Declaration;
 
@@ -304,12 +319,10 @@ typecheck_expression :: (expr: *Ast_Node) {
                     }
                 }
 
-                if !io_decl semantic_error(op.left, "Could not find the port '%' on module '%'", ident.name, module_inst.ident.name);
+                if !io_decl semantic_error(op.left, "Could not find the port '%' on module '%', referenced here:\n\n%", ident.name, module_inst.ident.name, node_location_string(op));
 
-                op.datatype.primitive = .WIRE;
-                op.datatype.bit_width = io_decl.datatype.bit_width;
-
-                // for 
+                op.datatype = io_decl.datatype;
+                op.datatype.module_input = false;
             } else {
                 assert(false);
             }
@@ -423,7 +436,7 @@ typecheck_module_instantiation :: (module: *Ast_Module_Inst) {
         semantic_error(module, "The name in this module instantiation does not refer to a module:\n\n%", node_location_string(module));
     }
 
-    decl := cast(*Ast_Module) module.ident.resolved_declaration.initialisation_value;
+    decl := cast(*Ast_Module) module.ident.resolved_declaration.expression;
     assert(decl.kind == .MODULE);
 
     //if module.inputs.count != decl.inputs.count {
@@ -490,35 +503,25 @@ evaluate_width_expression :: (expr: *Ast_Node) -> int, *Enum_Def, *Register_Def 
 }
 
 typecheck_declaration :: (decl: *Ast_Declaration) {
-    assert(decl.initialisation_value || decl.type_expression);
-
     if decl.typechecked return;
 
     array_add(*context.typechecker.in_progress, decl);
     defer pop(*context.typechecker.in_progress);
 
-    if decl.initialisation_value && decl.type_expression {
-        semantic_error(decl, "Currently, you may only write declarations with either a type, or a value from which to infer the type, not both. (Work in progress)\n\n%", node_location_string(decl));
-    }
-
-    if decl.initialisation_value && decl.datatype.is_type {
-        // For now we have to do this because types are not general expressions
-        evaluate_type_expression(decl.initialisation_value);
-        decl.datatype = decl.initialisation_value.datatype;
+    if !decl.constant || decl.datatype.is_type {
+        evaluate_type_expression(decl.expression);
+        decl.datatype = decl.expression.datatype;
 
         if decl.datatype.enum_def {
             decl.datatype.enum_def.decl = decl;
         } else if decl.datatype.register_def {
             decl.datatype.register_def.decl = decl;
         }
-
-    } else if decl.type_expression {
-        evaluate_type_expression(decl.type_expression);
-        decl.datatype = decl.type_expression.datatype;
     } else {
-        typecheck_expression(decl.initialisation_value);
-        decl.datatype = decl.initialisation_value.datatype;
+        typecheck_expression(decl.expression);
+        decl.datatype = decl.expression.datatype;
     }
+
     decl.datatype.module_input = decl.module_input;
 
     prim := decl.datatype.primitive;
@@ -641,7 +644,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             root.datatype.enum_def = ident.datatype.enum_def;
 
             if root.datatype.bit_width == -1 {
-                semantic_error(ident, "Cannot create a circuit element based on an enum without a specific width:\n\n%\n\nUse `enum[N]` here:\n\n%", node_location_string(ident), node_location_string(ident.resolved_declaration.initialisation_value));
+                semantic_error(ident, "Cannot create a circuit element based on an enum without a specific width:\n\n%\n\nUse `enum[N]` here:\n\n%", node_location_string(ident), node_location_string(ident.resolved_declaration.expression));
             }
 
             assert(expr.datatype.enum_def != null);
@@ -761,10 +764,9 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
                 semantic_error(id, "Expected a constant expression, but got a type name:\n\n%\n\nDeclared here:\n\n%", node_location_string(id), node_location_string(id.resolved_declaration));
             }
 
-            return internal_evaluate(id.resolved_declaration.initialisation_value); // Todo cache
+            return internal_evaluate(id.resolved_declaration.expression);
         }
 
-        assert(false);
         semantic_error(expr, "Expected a constant expression, but this can't be constant-evaluated:\n\n%\n", node_location_string(expr));
         return 0;
     }
@@ -782,6 +784,9 @@ resolve_identifier :: (id: *Ast_Identifier) {
             for module.constant_parameters if it.name == name return it;
             for module.inputs if it.name == name return it;
             for module.outputs if it.name == name return it;
+        } else if block.kind == .FOR {
+            _for := cast(*Ast_For) block;
+            if name == _for.index.name return _for.index;
         }
 
         for block.statements {

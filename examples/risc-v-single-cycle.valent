@@ -3,9 +3,9 @@ Processor :: module (
     clock: wire,
     reset: wire,
     instruction: wire[RiscV_Instruction],
-    data_in: wire[32]
+    data_in: wire[64]
 ) -> (
-    pc: flipflop[32],
+    pc: flipflop[64],
     bus: wire[Memory_Interface],
 ) {
 
@@ -33,23 +33,24 @@ Processor :: module (
 
 
 
-    imm: wire[32];
+    imm: wire[64];
 
-    I_immediate: wire[32];
-    S_immediate: wire[32];
-    B_immediate: wire[32];
-    U_immediate: wire[32];
-    J_immediate: wire[32];
+    I_immediate: wire[64];
+    S_immediate: wire[64];
+    B_immediate: wire[64];
+    U_immediate: wire[64];
+    J_immediate: wire[64];
 
     op: wire[32];
     combinational {
+
         op = instruction;
 
-        I_immediate = { 21 # op[31], op[30:20] };
-        S_immediate = { 21 # op[31], op[30:25], op[11:7] };
-        B_immediate = { 20 # op[31], op[7], op[30:25], op[11:8], 1'b0 };
-        U_immediate = { op[31:12], 12'b0 };
-        J_immediate = { 12 # op[31], op[19:12], op[20], op[30:25], op[24:21], 1'b0 };
+        I_immediate = { 53 # op[31], op[30:20] };
+        S_immediate = { 53 # op[31], op[30:25], op[11:7] };
+        B_immediate = { 52 # op[31], op[7], op[30:25], op[11:8], 1'b0 };
+        U_immediate = { 33 # op[31], op[30:12], 12'b0 };
+        J_immediate = { 44 # op[31], op[19:12], op[20], op[30:25], op[24:21], 1'b0 };
 
         switch instruction.opcode {
             case Opcode.AUIPC  imm = U_immediate;
@@ -57,7 +58,9 @@ Processor :: module (
             case Opcode.LOAD   imm = I_immediate;
             case Opcode.STORE  imm = S_immediate;
             case Opcode.OP_IMM imm = I_immediate;
-            case Opcode.OP     imm = 32'b0;
+            case Opcode.OP_IMM_32 imm = I_immediate;
+            case Opcode.OP     imm = 64'b0;
+            case Opcode.OP_32  imm = 64'b0;
             case Opcode.BRANCH imm = B_immediate;
             case Opcode.JAL    imm = J_immediate;
             case Opcode.JALR   imm = J_immediate;
@@ -66,7 +69,7 @@ Processor :: module (
 
 
 
-    pc_next: wire[32 + 1];
+    pc_next: wire[64 + 1];
 
     sequential (clock) {
         if mode == Mode.EXECUTE {
@@ -94,21 +97,23 @@ Processor :: module (
 
 
 
-    register_file: [32] memory[32];
+    register_file: [32] memory[64];
 
     sequential (clock) {
         if !reset && mode == Mode.EXECUTE {
             switch (opcode) {
-                case Opcode.OP      register_file[rd] <= alu_result;
-                case Opcode.OP_IMM  register_file[rd] <= alu_result;
-                case Opcode.LUI     register_file[rd] <= imm;
-                case Opcode.AUIPC   register_file[rd] <=,trunc imm + pc;
+                case Opcode.OP        register_file[rd] <= alu_result;
+                case Opcode.OP_IMM    register_file[rd] <= alu_result;
+                case Opcode.OP_32     register_file[rd] <= { 32 # alu_result[31], alu_result[31:0] };
+                case Opcode.OP_IMM_32 register_file[rd] <= { 32 # alu_result[31], alu_result[31:0] };
+                case Opcode.LUI       register_file[rd] <= imm;
+                case Opcode.AUIPC     register_file[rd] <=,trunc imm + pc;
             }
         }
     }
 
-    rs1: wire[32];
-    rs2: wire[32];
+    rs1: wire[64];
+    rs2: wire[64];
     rd:  wire[5];
 
     combinational {
@@ -123,38 +128,41 @@ Processor :: module (
     offset:      wire[8];
 
     combinational {
-        bus.write_enable = 4'b0;
+        bus.write_enable = 8'b0;
 
-        byte_offset[1:0] = alu_result[1:0];
-        offset           = byte_offset * 8;
+        byte_offset = alu_result[2:0];
+        offset      = byte_offset * 8;
 
         if mode == Mode.EXECUTE && opcode == Opcode.STORE {
             switch instruction.funct3 {
-                case Funct.STORE_SB bus.write_enable = 4'b0001 << byte_offset;
-                case Funct.STORE_SH bus.write_enable = 4'b0011 << byte_offset;
-                case Funct.STORE_SW bus.write_enable = 4'b1111;
+                case Funct.STORE_SB bus.write_enable = 8'b01 << byte_offset;
+                case Funct.STORE_SH bus.write_enable = 8'b11 << byte_offset;
+                case Funct.STORE_SW bus.write_enable = 8'h0f << byte_offset;
+                case Funct.STORE_SD bus.write_enable = 8'hff;
             }
         }
 
-        bus.address = { alu_result[31:2], 2'b0 };
+        bus.address = { alu_result[63:3], 3'b0 };
         bus.data = rs2 << offset;
     }
 
     sequential (clock) if mode == Mode.MEMORY {
         if opcode == Opcode.LOAD switch instruction.funct3 {
-            case Funct.LOAD_LB  register_file[rd][7:0] <= data_in[offset +: 8];
-            case Funct.LOAD_LH  register_file[rd] <= { 16 # data_in[16 + offset +: 1], data_in[offset +: 16] };
-            case Funct.LOAD_LW  register_file[rd] <= data_in;
-            case Funct.LOAD_LBU register_file[rd] <= { 24'b0, data_in[offset +: 8] };
-            case Funct.LOAD_LHU register_file[rd] <= { 16'b0, data_in[offset +: 16] };
+            case Funct.LOAD_LB  register_file[rd] <= { 56 # data_in[8  + offset +: 1], data_in[offset +: 8]  };
+            case Funct.LOAD_LH  register_file[rd] <= { 48 # data_in[16 + offset +: 1], data_in[offset +: 16] };
+            case Funct.LOAD_LW  register_file[rd] <= { 32 # data_in[32 + offset +: 1], data_in[offset +: 32] };
+            case Funct.LOAD_LD  register_file[rd] <= data_in;
+            case Funct.LOAD_LBU register_file[rd] <= { 56 # 1'b0,                      data_in[offset +: 8] };
+            case Funct.LOAD_LHU register_file[rd] <= { 48 # 1'b0,                      data_in[offset +: 16] };
+            case Funct.LOAD_LWU register_file[rd] <= { 32 # 1'b0,                      data_in[offset +: 32] };
         }
     }
 
 
 
-    alu_result: wire[32];
-    alu_lhs: wire[32];
-    alu_rhs: wire[32];
+    alu_result: wire[64];
+    alu_lhs: wire[64];
+    alu_rhs: wire[64];
 
     use_immediate: wire;
     funct7: wire;
@@ -163,6 +171,7 @@ Processor :: module (
         alu_lhs = rs1;
 
         use_immediate = opcode == Opcode.OP_IMM
+                     || opcode == Opcode.OP_IMM_32
                      || opcode == Opcode.LOAD
                      || opcode == Opcode.STORE
                      || opcode == Opcode.JALR;
@@ -177,88 +186,106 @@ Processor :: module (
 
         funct7 = instruction.funct7 > 0;
 
-        if opcode == Opcode.OP || opcode == Opcode.OP_IMM {
+        if opcode == Opcode.OP || opcode == Opcode.OP_IMM || opcode == Opcode.OP_32 || opcode == Opcode.OP_IMM_32 {
             switch instruction.funct3 {
                 case Funct.OP_ADD_SUB
-                    if funct7      alu_result       = alu_lhs  -  alu_rhs;
-                    else           alu_result =,trunc alu_lhs  +  alu_rhs;
+                    if funct7      alu_result       = alu_lhs -  alu_rhs;
+                    else           alu_result =,trunc alu_lhs +  alu_rhs;
                 case Funct.OP_SRL_SRA
-                    if funct7      alu_result       = alu_lhs >>  alu_rhs;
-                    else           alu_result       = 32'b0;               // Todo: arithmetic shift
-                case Funct.OP_SLL  alu_result       = alu_lhs  << alu_rhs;
-                case Funct.OP_SLT  alu_result[0]    = alu_lhs  <  alu_rhs; // Todo: sign
-                case Funct.OP_SLTU alu_result[0]    = alu_lhs  <  alu_rhs;
-                case Funct.OP_XOR  alu_result       = alu_lhs  ^  alu_rhs;
-                case Funct.OP_OR   alu_result       = alu_lhs  |  alu_rhs;
-                case Funct.OP_AND  alu_result       = alu_lhs  &  alu_rhs;
+                    if funct7      alu_result       = alu_lhs >> alu_rhs;
+                    else           alu_result       = 64'b0;              // Todo: arithmetic shift
+                case Funct.OP_SLL  alu_result       = alu_lhs << alu_rhs;
+                case Funct.OP_SLT  alu_result[0]    = alu_lhs <  alu_rhs; // Todo: sign
+                case Funct.OP_SLTU alu_result[0]    = alu_lhs <  alu_rhs;
+                case Funct.OP_XOR  alu_result       = alu_lhs ^  alu_rhs;
+                case Funct.OP_OR   alu_result       = alu_lhs |  alu_rhs;
+                case Funct.OP_AND  alu_result       = alu_lhs &  alu_rhs;
             }
         }
 
         else if opcode == Opcode.BRANCH switch instruction.funct3 {
-            case Funct.BRANCH_BEQ  alu_result = { 31'b0, alu_lhs == alu_rhs };
-            case Funct.BRANCH_BNE  alu_result = { 31'b0, alu_lhs != alu_rhs };
-            case Funct.BRANCH_BLT  alu_result = { 31'b0, alu_lhs <  alu_rhs }; // Todo: sign
-            case Funct.BRANCH_BGE  alu_result = { 31'b0, alu_lhs >= alu_rhs }; // Todo: sign
-            case Funct.BRANCH_BLTU alu_result = { 31'b0, alu_lhs <  alu_rhs };
-            case Funct.BRANCH_BGEU alu_result = { 31'b0, alu_lhs >= alu_rhs };
+            case Funct.BRANCH_BEQ  alu_result = { 63'b0, alu_lhs == alu_rhs };
+            case Funct.BRANCH_BNE  alu_result = { 63'b0, alu_lhs != alu_rhs };
+            case Funct.BRANCH_BLT  alu_result = { 63'b0, alu_lhs <  alu_rhs }; // Todo: sign
+            case Funct.BRANCH_BGE  alu_result = { 63'b0, alu_lhs >= alu_rhs }; // Todo: sign
+            case Funct.BRANCH_BLTU alu_result = { 63'b0, alu_lhs <  alu_rhs };
+            case Funct.BRANCH_BGEU alu_result = { 63'b0, alu_lhs >= alu_rhs };
         }
     }
 }
 
 Controller :: module (clock: wire, reset: wire) {
-
     processor: Processor(clock, reset);
 
     data_memory: Block_Ram(clock);
 
     combinational {
         data_memory.bus = processor.bus;
-        processor.data_in = data_memory.output;
+        processor.data_in = data_memory.data_out;
     }
 
     instruction_memory: Block_Ram(clock);
 
     combinational {
         instruction_memory.bus.address = processor.pc;
-        instruction_memory.bus.write_enable = 4'b0;
+        instruction_memory.bus.write_enable = 8'b0;
 
-        processor.instruction = instruction_memory.output;
+        // Because instructions are 32bit but the memory bus is 64bit, the PC will point to the high bits in the instruction bus every other instruction.
+        if high_pc_flag {
+            processor.instruction = (instruction_memory.data_out)[63:32];
+        } else {
+            processor.instruction = (instruction_memory.data_out)[31:0];
+        }
+    }
+
+    high_pc_flag: flipflop;
+
+    // Delay the PC low/high toggle so that it lines up with what instruction has actually been fetched yet. After the PC changes it still takes a cycle to load the new instruction.
+    sequential (clock) {
+        high_pc_flag <= (processor.pc)[2];
     }
 }
 
 Memory_Interface :: register {
-    address[32];
-    data[32];
-    write_enable[4];
+    address[64];
+    data[64];
+    write_enable[8];
 }
 
-Block_Ram :: module (clock: wire, bus: wire[Memory_Interface]) -> output: flipflop[32] {
+Block_Ram :: module (clock: wire, bus: wire[Memory_Interface]) -> data_out: flipflop[64] {
 
-    storage: ['h400] memory[32];
+    storage: ['h80] memory[64];
 
-    native_address: wire[30];
-    combinational native_address = (bus.address)[31:2];
+    native_address: wire[61];
+    combinational native_address = (bus.address)[63:3];
 
     sequential (clock) {
-        if (bus.write_enable)[0] storage[bus.address][7:0]   <= (bus.data)[7:0];
-        if (bus.write_enable)[1] storage[bus.address][15:8]  <= (bus.data)[15:8];
-        if (bus.write_enable)[2] storage[bus.address][23:16] <= (bus.data)[23:16];
-        if (bus.write_enable)[3] storage[bus.address][31:24] <= (bus.data)[31:24];
+        if (bus.write_enable)[0] storage[native_address][7:0]   <= (bus.data)[7:0];
+        if (bus.write_enable)[1] storage[native_address][15:8]  <= (bus.data)[15:8];
+        if (bus.write_enable)[2] storage[native_address][23:16] <= (bus.data)[23:16];
+        if (bus.write_enable)[3] storage[native_address][31:24] <= (bus.data)[31:24];
 
-        output <= storage[bus.address];
+        if (bus.write_enable)[4] storage[native_address][39:32] <= (bus.data)[39:32];
+        if (bus.write_enable)[5] storage[native_address][47:40] <= (bus.data)[47:40];
+        if (bus.write_enable)[6] storage[native_address][55:48] <= (bus.data)[55:48];
+        if (bus.write_enable)[7] storage[native_address][63:56] <= (bus.data)[63:56];
+
+        data_out <= storage[native_address];
     }
 }
 
 Opcode :: enum[7] {
-    AUIPC  :: 'b00_101_11;
-    LUI    :: 'b01_101_11;
-    LOAD   :: 'b00_000_11;
-    STORE  :: 'b01_000_11;
-    OP_IMM :: 'b00_100_11;
-    OP     :: 'b01_100_11;
-    BRANCH :: 'b11_000_11;
-    JALR   :: 'b11_001_11;
-    JAL    :: 'b11_011_11;
+    AUIPC     :: 'b00_101_11;
+    LUI       :: 'b01_101_11;
+    LOAD      :: 'b00_000_11;
+    STORE     :: 'b01_000_11;
+    OP_IMM    :: 'b00_100_11;
+    OP        :: 'b01_100_11;
+    OP_IMM_32 :: 'b00_110_11;
+    OP_32     :: 'b01_110_11;
+    BRANCH    :: 'b11_000_11;
+    JALR      :: 'b11_001_11;
+    JAL       :: 'b11_011_11;
 }
 
 Funct :: enum[3] {
@@ -281,10 +308,13 @@ Funct :: enum[3] {
     LOAD_LB     :: 'b000;
     LOAD_LH     :: 'b001;
     LOAD_LW     :: 'b010;
+    LOAD_LD     :: 'b011;
     LOAD_LBU    :: 'b100;
     LOAD_LHU    :: 'b101;
+    LOAD_LWU    :: 'b110;
 
     STORE_SB    :: 'b000;
     STORE_SH    :: 'b001;
     STORE_SW    :: 'b010;
+    STORE_SD    :: 'b011;
 }

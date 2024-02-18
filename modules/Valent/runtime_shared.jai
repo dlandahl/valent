@@ -17,6 +17,7 @@ Ast_Node :: struct {
         COMBINATIONAL_CIRCUIT;
         ASSIGNMENT;
         IF;
+        FOR;
         SWITCH;
         BLOCK;
         BIT_SELECT;
@@ -36,8 +37,7 @@ Ast_Declaration :: struct {
     node.kind = .DECLARATION;
 
     name: string;
-    type_expression: *Ast_Node;
-    initialisation_value: *Ast_Node;
+    expression: *Ast_Node;
 
     constant: bool;
     module_input: bool;
@@ -91,7 +91,7 @@ Ast_Assignment :: struct {
     using #as node: Ast_Node;
     node.kind = .ASSIGNMENT;
 
-    target: *Ast_Node; // Concat or ident
+    target: *Ast_Node;
     expr: *Ast_Node;
 
     trunc: bool;
@@ -121,6 +121,16 @@ Ast_If :: struct {
     condition: *Ast_Node;
     block: *Ast_Block;
     else_block: *Ast_Block;
+}
+
+Ast_For :: struct {
+    using #as block: Ast_Block;
+    node.kind = .FOR;
+
+    index: *Ast_Declaration;
+
+    start_index: *Ast_Node;
+    stop_index: *Ast_Node;
 }
 
 Ast_Binary_Op :: struct {
@@ -327,6 +337,7 @@ Token_Kind :: enum {
     CLOSED_BRACKET;
     OPEN_BRACE;
     CLOSED_BRACE;
+    DOTDOT;
 
     ARROW;
 
