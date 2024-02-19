@@ -56,7 +56,7 @@ build :: () {
 
     compiler_end_intercept(workspace);
 
-    run("/home/dlandahl/llvm16/bin/llc -filetype=obj .build/fibonacci.bc -o .build/fibonacci.o -march riscv64 --function-sections");
+    run("llc -filetype=obj .build/fibonacci.bc -o .build/fibonacci.o -march riscv64 --function-sections");
     run("riscv64-unknown-elf-ld -T linker.lds -o .build/fibonacci_linked.o .build/fibonacci.o");
     run("riscv64-unknown-elf-objcopy -O binary .build/fibonacci_linked.o .build/fibonacci.bin");
 

@@ -99,8 +99,8 @@ Processor :: module (
 
     register_file: [32] memory[64];
 
-    sequential (clock) {
-        if !reset && mode == Mode.EXECUTE {
+    sequential (clock) if !reset {
+        if mode == Mode.EXECUTE {
             switch (opcode) {
                 case Opcode.OP        register_file[rd] <= alu_result;
                 case Opcode.OP_IMM    register_file[rd] <= alu_result;
@@ -108,6 +108,18 @@ Processor :: module (
                 case Opcode.OP_IMM_32 register_file[rd] <= { 32 # alu_result[31], alu_result[31:0] };
                 case Opcode.LUI       register_file[rd] <= imm;
                 case Opcode.AUIPC     register_file[rd] <=,trunc imm + pc;
+            }
+        }
+
+        if mode == Mode.MEMORY {
+            if opcode == Opcode.LOAD switch instruction.funct3 {
+                case Funct.LOAD_LB  register_file[rd] <= { 56 # data_in[8  + offset +: 1], data_in[offset +: 8]  };
+                case Funct.LOAD_LH  register_file[rd] <= { 48 # data_in[16 + offset +: 1], data_in[offset +: 16] };
+                case Funct.LOAD_LW  register_file[rd] <= { 32 # data_in[32 + offset +: 1], data_in[offset +: 32] };
+                case Funct.LOAD_LD  register_file[rd] <= data_in;
+                case Funct.LOAD_LBU register_file[rd] <= { 56 # 1'b0, data_in[offset +: 8] };
+                case Funct.LOAD_LHU register_file[rd] <= { 48 # 1'b0, data_in[offset +: 16] };
+                case Funct.LOAD_LWU register_file[rd] <= { 32 # 1'b0, data_in[offset +: 32] };
             }
         }
     }
@@ -124,8 +136,8 @@ Processor :: module (
 
 
 
-    byte_offset: wire[4];
-    offset:      wire[8];
+    byte_offset: wire[3];
+    offset:      wire[6];
 
     combinational {
         bus.write_enable = 8'b0;
@@ -147,15 +159,6 @@ Processor :: module (
     }
 
     sequential (clock) if mode == Mode.MEMORY {
-        if opcode == Opcode.LOAD switch instruction.funct3 {
-            case Funct.LOAD_LB  register_file[rd] <= { 56 # data_in[8  + offset +: 1], data_in[offset +: 8]  };
-            case Funct.LOAD_LH  register_file[rd] <= { 48 # data_in[16 + offset +: 1], data_in[offset +: 16] };
-            case Funct.LOAD_LW  register_file[rd] <= { 32 # data_in[32 + offset +: 1], data_in[offset +: 32] };
-            case Funct.LOAD_LD  register_file[rd] <= data_in;
-            case Funct.LOAD_LBU register_file[rd] <= { 56 # 1'b0,                      data_in[offset +: 8] };
-            case Funct.LOAD_LHU register_file[rd] <= { 48 # 1'b0,                      data_in[offset +: 16] };
-            case Funct.LOAD_LWU register_file[rd] <= { 32 # 1'b0,                      data_in[offset +: 32] };
-        }
     }
 
 
@@ -183,7 +186,6 @@ Processor :: module (
         }
 
         alu_result =,trunc alu_lhs + alu_rhs;
-
         funct7 = instruction.funct7 > 0;
 
         if opcode == Opcode.OP || opcode == Opcode.OP_IMM || opcode == Opcode.OP_32 || opcode == Opcode.OP_IMM_32 {
@@ -231,6 +233,7 @@ Controller :: module (clock: wire, reset: wire) {
         instruction_memory.bus.write_enable = 8'b0;
 
         // Because instructions are 32bit but the memory bus is 64bit, the PC will point to the high bits in the instruction bus every other instruction.
+
         if high_pc_flag {
             processor.instruction = (instruction_memory.data_out)[63:32];
         } else {
@@ -241,6 +244,7 @@ Controller :: module (clock: wire, reset: wire) {
     high_pc_flag: flipflop;
 
     // Delay the PC low/high toggle so that it lines up with what instruction has actually been fetched yet. After the PC changes it still takes a cycle to load the new instruction.
+
     sequential (clock) {
         high_pc_flag <= (processor.pc)[2];
     }
