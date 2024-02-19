@@ -24,3 +24,4 @@ valent.exe
 pthreadVC2.dll
 examples/required
 fibonacci/.build
+fibonacci/program.mem

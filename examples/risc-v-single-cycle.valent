@@ -52,6 +52,7 @@ Processor :: module (
         U_immediate = { 33 # op[31], op[30:12], 12'b0 };
         J_immediate = { 44 # op[31], op[19:12], op[20], op[30:25], op[24:21], 1'b0 };
 
+        imm = 0;
         switch instruction.opcode {
             case Opcode.AUIPC  imm = U_immediate;
             case Opcode.LUI    imm = U_immediate;
@@ -158,9 +159,6 @@ Processor :: module (
         bus.data = rs2 << offset;
     }
 
-    sequential (clock) if mode == Mode.MEMORY {
-    }
-
 
 
     alu_result: wire[64];
@@ -216,7 +214,7 @@ Processor :: module (
     }
 }
 
-Controller :: module (clock: wire, reset: wire) {
+Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: wire[16]) {
     processor: Processor(clock, reset);
 
     data_memory: Block_Ram(clock);
@@ -224,21 +222,21 @@ Controller :: module (clock: wire, reset: wire) {
     combinational {
         data_memory.bus = processor.bus;
         processor.data_in = data_memory.data_out;
+
+        if processor.bus.address == MMIO_ADDRESS_SWITCHES {
+            processor.data_in = { 48'b0, switches };
+        }
     }
 
     instruction_memory: Block_Ram(clock);
 
     combinational {
+        instruction_memory.bus = 0;
         instruction_memory.bus.address = processor.pc;
-        instruction_memory.bus.write_enable = 8'b0;
 
         // Because instructions are 32bit but the memory bus is 64bit, the PC will point to the high bits in the instruction bus every other instruction.
 
-        if high_pc_flag {
-            processor.instruction = (instruction_memory.data_out)[63:32];
-        } else {
-            processor.instruction = (instruction_memory.data_out)[31:0];
-        }
+        processor.instruction = (instruction_memory.data_out)[high_pc_flag * 32 +: 32];
     }
 
     high_pc_flag: flipflop;
@@ -247,6 +245,20 @@ Controller :: module (clock: wire, reset: wire) {
 
     sequential (clock) {
         high_pc_flag <= (processor.pc)[2];
+    }
+
+
+
+    MMIO_ADDRESS_SWITCHES :: 'h40;
+    MMIO_ADDRESS_LEDS     :: 'h48;
+
+    led_register: flipflop[16];
+    combinational leds = led_register;
+
+    sequential (clock) {
+        if processor.bus.address == MMIO_ADDRESS_LEDS && (processor.bus.write_enable)[1:0] == 2'b11 {
+            led_register <= (processor.bus.data)[15:0];
+        }
     }
 }
 
