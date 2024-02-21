@@ -40,7 +40,7 @@ Typechecker :: struct {
 
 #add_context typechecker: Typechecker;
 
-typecheck_block :: (block: *Ast_Block) {
+typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
     names: Table(string, *Ast_Declaration);
 
     Duplication_Check :: (decl: *Ast_Declaration) #expand {
@@ -105,13 +105,32 @@ typecheck_block :: (block: *Ast_Block) {
 
             typecheck_expression(ass.target);
 
-            // Commented out for now because it catches expressions in bit selects
-            // Walk_Expression(ass.target, #code {
-            //     if expr.kind == .LITERAL {
-            //         lit := cast(*Ast_Literal) expr;
-            //         if lit.int_value != 0 semantic_error(lit, "Literals in lvalue concatenations must be zero - they only align the writable elements.\n\n%", node_location_string(lit));
-            //     }
-            // });
+            Walk_Expression(ass.target, #code {
+                if expr.kind == .LITERAL {
+                    lit := cast(*Ast_Literal) expr;
+                    if lit.int_value != 0 semantic_error(lit, "Literals in lvalue concatenations must be zero - they only align the writable elements.\n\n%", node_location_string(lit));
+                }
+
+                if expr.kind == .BINARY_OP {
+                    op := cast(*Ast_Binary_Op) expr;
+                    if op.operation == .OPEN_BRACKET {
+                        Walk_Expression(op.left, code, deferred, user_data);
+                        return;
+                    }
+                }
+
+                if expr.kind == .IDENTIFIER {
+                    ident := cast(*Ast_Identifier) expr;
+
+                    if ident.resolved_declaration && ident.resolved_declaration.driving_circuit != user_data {
+                        if ident.resolved_declaration.driving_circuit != null {
+                            semantic_error(expr, "Circuit elements may only be assigned in a single circuit block. The circuit element declared here:\n\n%\n\nis driven here:\n\n%\n\nbut it was already being assigned in this block:\n\n%", node_location_string(ident.resolved_declaration), node_location_string(ident), node_location_string(ident.resolved_declaration.driving_circuit));
+                        }
+
+                        ident.resolved_declaration.driving_circuit = user_data;
+                    }
+                }
+            }, user_data = root_circuit);
 
             typecheck_expression(ass.expr);
 
@@ -142,10 +161,10 @@ typecheck_block :: (block: *Ast_Block) {
           case .IF;
             _if := cast(*Ast_If) it;
             typecheck_expression(_if.condition);
-            typecheck_block(_if.block);
+            typecheck_block(_if.block, root_circuit);
 
             if _if.else_block {
-                typecheck_block(_if.else_block);
+                typecheck_block(_if.else_block, root_circuit);
             }
 
           case .FOR;
@@ -156,7 +175,7 @@ typecheck_block :: (block: *Ast_Block) {
             _for.index.datatype.primitive = .CONSTANT;
             _for.index.typechecked = true;
 
-            typecheck_block(*_for.block);
+            typecheck_block(*_for.block, root_circuit);
 
           case .SWITCH;
             switch := cast(*Ast_Switch) it;
@@ -171,17 +190,17 @@ typecheck_block :: (block: *Ast_Block) {
                     }
                 }
 
-                typecheck_block(it.block);
+                typecheck_block(it.block, root_circuit);
             }
 
           case .SEQUENTIAL_CIRCUIT;
             seq := cast(*Ast_Sequential_Circuit) it;
             resolve_identifier(seq.clock);
-            typecheck_block(seq.block);
+            typecheck_block(seq.block, seq);
 
           case .COMBINATIONAL_CIRCUIT;
             comb := cast(*Ast_Combinational_Circuit) it;
-            typecheck_block(comb.block);
+            typecheck_block(comb.block, comb);
 
           case .JAI_CODE;
             jai := cast(*Ast_Jai_Code) it;
@@ -512,11 +531,9 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
         evaluate_type_expression(decl.expression);
         decl.datatype = decl.expression.datatype;
 
-        if decl.datatype.enum_def {
-            decl.datatype.enum_def.decl = decl;
-        } else if decl.datatype.register_def {
-            decl.datatype.register_def.decl = decl;
-        }
+        if decl.datatype.enum_def     decl.datatype.enum_def.decl     = decl;
+        if decl.datatype.register_def decl.datatype.register_def.decl = decl;
+
     } else {
         typecheck_expression(decl.expression);
         decl.datatype = decl.expression.datatype;
@@ -901,6 +918,7 @@ node_location_string :: (node: *Ast_Node) -> string {
 
     first := line;
     first.count = loc.start_char;
+    first = trim_left(first);
 
     second := line;
     second.data += loc.start_char;
@@ -910,5 +928,5 @@ node_location_string :: (node: *Ast_Node) -> string {
     third.data += loc.end_char;
     third.count -= loc.end_char;
 
-    return tprint("(line %): %[31m%[0m%", loc.line+1, first, second, third);
+    return tprint("   %| %[31m%[0m%", loc.line+1, first, second, third);
 }

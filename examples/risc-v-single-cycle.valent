@@ -226,6 +226,9 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: wi
         if processor.bus.address == MMIO_ADDRESS_SWITCHES {
             processor.data_in = { 48'b0, switches };
         }
+
+        // Because instructions are 32bit but the memory bus is 64bit, the PC will point to the high bits in the instruction bus every other instruction.
+        processor.instruction = (instruction_memory.data_out)[high_pc_flag * 32 +: 32];
     }
 
     instruction_memory: Block_Ram(clock);
@@ -233,16 +236,11 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: wi
     combinational {
         instruction_memory.bus = 0;
         instruction_memory.bus.address = processor.pc;
-
-        // Because instructions are 32bit but the memory bus is 64bit, the PC will point to the high bits in the instruction bus every other instruction.
-
-        processor.instruction = (instruction_memory.data_out)[high_pc_flag * 32 +: 32];
     }
 
     high_pc_flag: flipflop;
 
     // Delay the PC low/high toggle so that it lines up with what instruction has actually been fetched yet. After the PC changes it still takes a cycle to load the new instruction.
-
     sequential (clock) {
         high_pc_flag <= (processor.pc)[2];
     }

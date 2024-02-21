@@ -39,6 +39,8 @@ Ast_Declaration :: struct {
     name: string;
     expression: *Ast_Node;
 
+    driving_circuit: *Ast_Node; // If this declaration is for a circuit element, this is the sequential or combinational block that drives it. Used to detect multiple drivers.
+
     constant: bool;
     module_input: bool;
 }
