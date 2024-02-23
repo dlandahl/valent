@@ -227,7 +227,7 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: wi
             processor.data_in = { 48'b0, switches };
         }
 
-        // Because instructions are 32bit but the memory bus is 64bit, the PC will point to the high bits in the instruction bus every other instruction.
+        // Because instructions are 32bit but the memory bus is 64bit, the PC will sometimes point to the high bits in the instruction bus.
         processor.instruction = (instruction_memory.data_out)[high_pc_flag * 32 +: 32];
     }
 
