@@ -1,21 +1,20 @@
 
 PROGRAM :: #string END
+
+MMIO_SWITCHES : *u64 : xx 0x40;
+MMIO_LEDS     : *u64 : xx 0x48;
+
 #program_export
 main :: () {
-    f, f_1, f_2: u64 = 1, 1, 0;
+    while true {
+        switches := MMIO_SWITCHES.*;
+        low: u64 = switches & 0xff;
+        high: u64 = switches >> 8;
 
-    sequence: *u64 = cast(*u64)8;
-
-    for 0..29 {
-        sequence[it] = f;
-
-        f = f_1 + f_2;
-        f_2 = f_1;
-        f_1 = f;
+        MMIO_LEDS.* = low + high;
     }
-
-    while true {}
 }
+
 END;
 
 #run build();

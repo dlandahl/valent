@@ -192,8 +192,8 @@ Processor :: module (
                     if funct7      alu_result       = alu_lhs -  alu_rhs;
                     else           alu_result =,trunc alu_lhs +  alu_rhs;
                 case Funct.OP_SRL_SRA
-                    if funct7      alu_result       = alu_lhs >> alu_rhs;
-                    else           alu_result       = 64'b0;              // Todo: arithmetic shift
+                    if funct7      alu_result       = alu_lhs >>> alu_rhs;
+                    else           alu_result       = alu_lhs >> alu_rhs;
                 case Funct.OP_SLL  alu_result       = alu_lhs << alu_rhs;
                 case Funct.OP_SLT  alu_result[0]    = alu_lhs <  alu_rhs; // Todo: sign
                 case Funct.OP_SLTU alu_result[0]    = alu_lhs <  alu_rhs;
@@ -214,14 +214,14 @@ Processor :: module (
     }
 }
 
-Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: wire[16]) {
+Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: flipflop[16]) {
     processor: Processor(clock, reset);
 
-    data_memory: Block_Ram(clock);
+    storage: Block_Ram(clock);
 
     combinational {
-        data_memory.bus = processor.bus;
-        processor.data_in = data_memory.data_out;
+        storage.port_a = processor.bus;
+        processor.data_in = storage.port_a_out;
 
         if processor.bus.address == MMIO_ADDRESS_SWITCHES {
             processor.data_in = { 48'b0, switches };
@@ -231,11 +231,9 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: wi
         processor.instruction = (instruction_memory.data_out)[high_pc_flag * 32 +: 32];
     }
 
-    instruction_memory: Block_Ram(clock);
-
     combinational {
-        instruction_memory.bus = 0;
-        instruction_memory.bus.address = processor.pc;
+        storage.port_b = 0;
+        storage.port_b.address = processor.pc;
     }
 
     high_pc_flag: flipflop;
@@ -250,12 +248,13 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: wi
     MMIO_ADDRESS_SWITCHES :: 'h40;
     MMIO_ADDRESS_LEDS     :: 'h48;
 
-    led_register: flipflop[16];
-    combinational leds = led_register;
-
     sequential (clock) {
         if processor.bus.address == MMIO_ADDRESS_LEDS && (processor.bus.write_enable)[1:0] == 2'b11 {
-            led_register <= (processor.bus.data)[15:0];
+            leds <= (processor.bus.data)[15:0];
+        }
+
+        if reset {
+            leds <= 0;
         }
     }
 }
@@ -266,25 +265,45 @@ Memory_Interface :: register {
     write_enable[8];
 }
 
-Block_Ram :: module (clock: wire, bus: wire[Memory_Interface]) -> data_out: flipflop[64] {
+Block_Ram :: module (clock: wire, port_a: wire[Memory_Interface], port_b: wire[Memory_Interface]) -> port_a_out: flipflop[64], port_b_out: flipflop[64] {
+    // 2-port BRAM, port A is used for data, port B for instructions
 
-    storage: ['h80] memory[64];
+    storage: ['h200] memory[64];
 
-    native_address: wire[61];
-    combinational native_address = (bus.address)[63:3];
+    native_address_a: wire[61];
+    native_address_b: wire[61];
+
+    combinational {
+        native_address_a = (port_a.address)[63:3];
+        native_address_b = (port_b.address)[63:3];
+    }
 
     sequential (clock) {
-        if (bus.write_enable)[0] storage[native_address][7:0]   <= (bus.data)[7:0];
-        if (bus.write_enable)[1] storage[native_address][15:8]  <= (bus.data)[15:8];
-        if (bus.write_enable)[2] storage[native_address][23:16] <= (bus.data)[23:16];
-        if (bus.write_enable)[3] storage[native_address][31:24] <= (bus.data)[31:24];
+        if (port_a.write_enable)[0] storage[native_address_a][7:0]   <= (port_a.data)[7:0];
+        if (port_a.write_enable)[1] storage[native_address_a][15:8]  <= (port_a.data)[15:8];
+        if (port_a.write_enable)[2] storage[native_address_a][23:16] <= (port_a.data)[23:16];
+        if (port_a.write_enable)[3] storage[native_address_a][31:24] <= (port_a.data)[31:24];
 
-        if (bus.write_enable)[4] storage[native_address][39:32] <= (bus.data)[39:32];
-        if (bus.write_enable)[5] storage[native_address][47:40] <= (bus.data)[47:40];
-        if (bus.write_enable)[6] storage[native_address][55:48] <= (bus.data)[55:48];
-        if (bus.write_enable)[7] storage[native_address][63:56] <= (bus.data)[63:56];
+        if (port_a.write_enable)[4] storage[native_address_a][39:32] <= (port_a.data)[39:32];
+        if (port_a.write_enable)[5] storage[native_address_a][47:40] <= (port_a.data)[47:40];
+        if (port_a.write_enable)[6] storage[native_address_a][55:48] <= (port_a.data)[55:48];
+        if (port_a.write_enable)[7] storage[native_address_a][63:56] <= (port_a.data)[63:56];
 
-        data_out <= storage[native_address];
+        port_a_out <= storage[native_address_a];
+    }
+
+    sequential (clock) {
+        if (port_b.write_enable)[0] storage[native_address_b][7:0]   <= (port_b.data)[7:0];
+        if (port_b.write_enable)[1] storage[native_address_b][15:8]  <= (port_b.data)[15:8];
+        if (port_b.write_enable)[2] storage[native_address_b][23:16] <= (port_b.data)[23:16];
+        if (port_b.write_enable)[3] storage[native_address_b][31:24] <= (port_b.data)[31:24];
+
+        if (port_b.write_enable)[4] storage[native_address_b][39:32] <= (port_b.data)[39:32];
+        if (port_b.write_enable)[5] storage[native_address_b][47:40] <= (port_b.data)[47:40];
+        if (port_b.write_enable)[6] storage[native_address_b][55:48] <= (port_b.data)[55:48];
+        if (port_b.write_enable)[7] storage[native_address_b][63:56] <= (port_b.data)[63:56];
+
+        port_b_out <= storage[native_address_b];
     }
 }
 
