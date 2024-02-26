@@ -118,9 +118,9 @@ Processor :: module (
                 case Funct.LOAD_LH  register_file[rd] <= { 48 # data_in[16 + offset +: 1], data_in[offset +: 16] };
                 case Funct.LOAD_LW  register_file[rd] <= { 32 # data_in[32 + offset +: 1], data_in[offset +: 32] };
                 case Funct.LOAD_LD  register_file[rd] <= data_in;
-                case Funct.LOAD_LBU register_file[rd] <= { 56 # 1'b0, data_in[offset +: 8] };
-                case Funct.LOAD_LHU register_file[rd] <= { 48 # 1'b0, data_in[offset +: 16] };
-                case Funct.LOAD_LWU register_file[rd] <= { 32 # 1'b0, data_in[offset +: 32] };
+                case Funct.LOAD_LBU register_file[rd] <= { 56'b0, data_in[offset +: 8] };
+                case Funct.LOAD_LHU register_file[rd] <= { 48'b0, data_in[offset +: 16] };
+                case Funct.LOAD_LWU register_file[rd] <= { 32'b0, data_in[offset +: 32] };
             }
         }
     }
@@ -228,10 +228,8 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: fl
         }
 
         // Because instructions are 32bit but the memory bus is 64bit, the PC will sometimes point to the high bits in the instruction bus.
-        processor.instruction = (instruction_memory.data_out)[high_pc_flag * 32 +: 32];
-    }
+        processor.instruction = (storage.port_b_out)[high_pc_flag * 32 +: 32];
 
-    combinational {
         storage.port_b = 0;
         storage.port_b.address = processor.pc;
     }
@@ -289,10 +287,6 @@ Block_Ram :: module (clock: wire, port_a: wire[Memory_Interface], port_b: wire[M
         if (port_a.write_enable)[6] storage[native_address_a][55:48] <= (port_a.data)[55:48];
         if (port_a.write_enable)[7] storage[native_address_a][63:56] <= (port_a.data)[63:56];
 
-        port_a_out <= storage[native_address_a];
-    }
-
-    sequential (clock) {
         if (port_b.write_enable)[0] storage[native_address_b][7:0]   <= (port_b.data)[7:0];
         if (port_b.write_enable)[1] storage[native_address_b][15:8]  <= (port_b.data)[15:8];
         if (port_b.write_enable)[2] storage[native_address_b][23:16] <= (port_b.data)[23:16];
@@ -302,9 +296,11 @@ Block_Ram :: module (clock: wire, port_a: wire[Memory_Interface], port_b: wire[M
         if (port_b.write_enable)[5] storage[native_address_b][47:40] <= (port_b.data)[47:40];
         if (port_b.write_enable)[6] storage[native_address_b][55:48] <= (port_b.data)[55:48];
         if (port_b.write_enable)[7] storage[native_address_b][63:56] <= (port_b.data)[63:56];
-
-        port_b_out <= storage[native_address_b];
     }
+
+    // In Vivado synthesis, different reads from the same memory should be in separate blocks. In the future should do this automatically in the backend
+    sequential (clock) port_b_out <= storage[native_address_b];
+    sequential (clock) port_a_out <= storage[native_address_a];
 }
 
 Opcode :: enum[7] {

@@ -141,27 +141,29 @@ stringify_statement :: (ast: *Ast_Node) -> string {
 }
 
 operator_info :: Binary_Operator_Info.[
-    .{ .OPERATOR_DOT,              "",   "",           14 },
-    .{ .OPERATOR_ADD,              "+",  "$add",       10 },
-    .{ .OPERATOR_SUBTRACT,         "-",  "$sub",       10 },
-    .{ .OPERATOR_MULTIPLY,         "*","  $mul",       11 },
-    .{ .OPERATOR_DIVIDE,           "/",  "$div",       11 },
-    .{ .OPERATOR_MODULO,           "%",  "$mod",       11 },
-    .{ .OPERATOR_BIT_OR,           "|",  "$or",        3  },
-    .{ .OPERATOR_BIT_AND,          "&",  "$and",       5  },
-    .{ .OPERATOR_BIT_XOR,          "^",  "$xor",       7  },
-    .{ .OPERATOR_LESS_THAN,        "<",  "$lt",        8  },
-    .{ .OPERATOR_GREATER_OR_EQUAL, ">=", "$ge",        8  },
-    .{ .OPERATOR_LESS_OR_EQUAL,    "<=", "$le",        8  },
-    .{ .OPERATOR_GREATER_THAN,     ">",  "$gt",        8  },
-    .{ .OPERATOR_EQUALS,           "==", "$eq",        6  },
-    .{ .OPERATOR_NOT_EQUAL,        "!=", "$ne",        6  },
-    .{ .OPERATOR_LOGICAL_OR,       "||", "$logic_or",  1  },
-    .{ .OPERATOR_WIDTH,            "'",  "",           13 },
-    .{ .OPERATOR_LOGICAL_AND,      "&&", "$logic_and", 2  },
-    .{ .OPERATOR_SHIFT_LEFT,       "<<", "$shl",       9  },
-    .{ .OPERATOR_SHIFT_RIGHT,      ">>", "$shr",       9  },
-    .{ .OPERATOR_REPEAT,           "",   "",           12 },
+    .{ .OPERATOR_DOT,               "",    "",           14 },
+    .{ .OPERATOR_ADD,               "+",   "$add",       10 },
+    .{ .OPERATOR_SUBTRACT,          "-",   "$sub",       10 },
+    .{ .OPERATOR_MULTIPLY,          "*",   "$mul",       11 },
+    .{ .OPERATOR_DIVIDE,            "/",   "$div",       11 },
+    .{ .OPERATOR_MODULO,            "%",   "$mod",       11 },
+    .{ .OPERATOR_BIT_OR,            "|",   "$or",        3  },
+    .{ .OPERATOR_BIT_AND,           "&",   "$and",       5  },
+    .{ .OPERATOR_BIT_XOR,           "^",   "$xor",       7  },
+    .{ .OPERATOR_LESS_THAN,         "<",   "$lt",        8  },
+    .{ .OPERATOR_GREATER_OR_EQUAL,  ">=",  "$ge",        8  },
+    .{ .OPERATOR_LESS_OR_EQUAL,     "<=",  "$le",        8  },
+    .{ .OPERATOR_GREATER_THAN,      ">",   "$gt",        8  },
+    .{ .OPERATOR_EQUALS,            "==",  "$eq",        6  },
+    .{ .OPERATOR_NOT_EQUAL,         "!=",  "$ne",        6  },
+    .{ .OPERATOR_LOGICAL_OR,        "||",  "$logic_or",  1  },
+    .{ .OPERATOR_WIDTH,             "'",   "",           13 },
+    .{ .OPERATOR_LOGICAL_AND,       "&&",  "$logic_and", 2  },
+    .{ .OPERATOR_SHIFT_LEFT,        "<<",  "$shl",       9  },
+    .{ .OPERATOR_SHIFT_RIGHT,       ">>",  "$shr",       9  },
+    .{ .OPERATOR_SHIFT_LEFT_ARITH,  "<<<", "",           9  },
+    .{ .OPERATOR_SHIFT_RIGHT_ARITH, ">>>", "",           9  },
+    .{ .OPERATOR_REPEAT,            "",    "",           12 },
 ];
 
 Binary_Operator_Info :: struct {
@@ -1173,8 +1175,14 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
       case #char ">";
         cursor += 1;
         if current() == #char "="  Emit(.OPERATOR_GREATER_OR_EQUAL);
-        else if current() == #char ">"  Emit(.OPERATOR_SHIFT_RIGHT);
-        else {
+        else if current() == #char ">" {
+            cursor += 1;
+            if current() == #char ">" Emit(.OPERATOR_SHIFT_RIGHT_ARITH);
+            else {
+                cursor -= 1;
+                Emit(.OPERATOR_SHIFT_RIGHT);
+            }
+        } else {
             cursor -= 1;
             Emit(.OPERATOR_GREATER_THAN);
         }
@@ -1182,8 +1190,14 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
       case #char "<";
         cursor += 1;
         if      current() == #char "="  Emit(.OPERATOR_LESS_OR_EQUAL);
-        else if current() == #char "<"  Emit(.OPERATOR_SHIFT_LEFT);
-        else {
+        else if current() == #char "<" {
+            cursor += 1;
+            if current() == #char "<" Emit(.OPERATOR_SHIFT_LEFT_ARITH);
+            else {
+                cursor -= 1;
+                Emit(.OPERATOR_SHIFT_LEFT);
+            }
+        } else {
             cursor -= 1;
             Emit(.OPERATOR_LESS_THAN);
         }
@@ -1247,6 +1261,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
                   case #char "d";
                   case #char "h"; base = 16;
                   case #char "b"; base = 2;
+                  case; Emit(.ERROR);  
                 }
 
                 cursor += 1;
