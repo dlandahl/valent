@@ -344,6 +344,7 @@ Token_Kind :: enum {
     DOTDOT;
 
     ARROW;
+    SEQUENTIAL_ASSIGNMENT;
 
     IDENTIFIER;
     INTEGER;

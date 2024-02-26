@@ -9,14 +9,14 @@ Processor :: module (
     bus: wire[Memory_Interface],
 ) {
 
-    Mode :: enum [1] { EXECUTE; MEMORY; }
+    Mode :: enum[1] { EXECUTE; MEMORY; }
     mode: flipflop[Mode];
 
     // Alternate cycles for instruction execution and waiting for memory latency
 
     sequential (clock) {
-        if reset mode <= Mode.EXECUTE;
-        else     mode <= !mode;
+        if reset mode <- Mode.EXECUTE;
+        else     mode <- !mode;
     }
 
     RiscV_Instruction :: register[32] {
@@ -74,10 +74,10 @@ Processor :: module (
 
     sequential (clock) {
         if mode == Mode.EXECUTE {
-            pc <=,trunc pc_next;
+            pc <-,trunc pc_next;
         }
 
-        if reset pc <= 0;
+        if reset pc <- 0;
     }
 
     branch_taken: wire;
@@ -103,24 +103,24 @@ Processor :: module (
     sequential (clock) if !reset {
         if mode == Mode.EXECUTE {
             switch (opcode) {
-                case Opcode.OP        register_file[rd] <= alu_result;
-                case Opcode.OP_IMM    register_file[rd] <= alu_result;
-                case Opcode.OP_32     register_file[rd] <= { 32 # alu_result[31], alu_result[31:0] };
-                case Opcode.OP_IMM_32 register_file[rd] <= { 32 # alu_result[31], alu_result[31:0] };
-                case Opcode.LUI       register_file[rd] <= imm;
-                case Opcode.AUIPC     register_file[rd] <=,trunc imm + pc;
+                case Opcode.OP        register_file[rd] <- alu_result;
+                case Opcode.OP_IMM    register_file[rd] <- alu_result;
+                case Opcode.OP_32     register_file[rd] <- { 32 # alu_result[31], alu_result[31:0] };
+                case Opcode.OP_IMM_32 register_file[rd] <- { 32 # alu_result[31], alu_result[31:0] };
+                case Opcode.LUI       register_file[rd] <- imm;
+                case Opcode.AUIPC     register_file[rd] <-,trunc imm + pc;
             }
         }
 
         if mode == Mode.MEMORY {
             if opcode == Opcode.LOAD switch instruction.funct3 {
-                case Funct.LOAD_LB  register_file[rd] <= { 56 # data_in[8  + offset +: 1], data_in[offset +: 8]  };
-                case Funct.LOAD_LH  register_file[rd] <= { 48 # data_in[16 + offset +: 1], data_in[offset +: 16] };
-                case Funct.LOAD_LW  register_file[rd] <= { 32 # data_in[32 + offset +: 1], data_in[offset +: 32] };
-                case Funct.LOAD_LD  register_file[rd] <= data_in;
-                case Funct.LOAD_LBU register_file[rd] <= { 56'b0, data_in[offset +: 8] };
-                case Funct.LOAD_LHU register_file[rd] <= { 48'b0, data_in[offset +: 16] };
-                case Funct.LOAD_LWU register_file[rd] <= { 32'b0, data_in[offset +: 32] };
+                case Funct.LOAD_LB  register_file[rd] <- { 56 # data_in[8  + offset +: 1], data_in[offset +: 8]  };
+                case Funct.LOAD_LH  register_file[rd] <- { 48 # data_in[16 + offset +: 1], data_in[offset +: 16] };
+                case Funct.LOAD_LW  register_file[rd] <- { 32 # data_in[32 + offset +: 1], data_in[offset +: 32] };
+                case Funct.LOAD_LD  register_file[rd] <- data_in;
+                case Funct.LOAD_LBU register_file[rd] <- { 56'b0, data_in[offset +: 8] };
+                case Funct.LOAD_LHU register_file[rd] <- { 48'b0, data_in[offset +: 16] };
+                case Funct.LOAD_LWU register_file[rd] <- { 32'b0, data_in[offset +: 32] };
             }
         }
     }
@@ -238,7 +238,7 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: fl
 
     // Delay the PC low/high toggle so that it lines up with what instruction has actually been fetched yet. After the PC changes it still takes a cycle to load the new instruction.
     sequential (clock) {
-        high_pc_flag <= (processor.pc)[2];
+        high_pc_flag <- (processor.pc)[2];
     }
 
 
@@ -248,11 +248,11 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: fl
 
     sequential (clock) {
         if processor.bus.address == MMIO_ADDRESS_LEDS && (processor.bus.write_enable)[1:0] == 2'b11 {
-            leds <= (processor.bus.data)[15:0];
+            leds <- (processor.bus.data)[15:0];
         }
 
         if reset {
-            leds <= 0;
+            leds <- 0;
         }
     }
 }
@@ -263,7 +263,14 @@ Memory_Interface :: register {
     write_enable[8];
 }
 
-Block_Ram :: module (clock: wire, port_a: wire[Memory_Interface], port_b: wire[Memory_Interface]) -> port_a_out: flipflop[64], port_b_out: flipflop[64] {
+Block_Ram :: module (
+    clock: wire,
+    port_a: wire[Memory_Interface],
+    port_b: wire[Memory_Interface]
+) -> (
+    port_a_out: flipflop[64],
+    port_b_out: flipflop[64]
+) {
     // 2-port BRAM, port A is used for data, port B for instructions
 
     storage: ['h200] memory[64];
@@ -277,30 +284,30 @@ Block_Ram :: module (clock: wire, port_a: wire[Memory_Interface], port_b: wire[M
     }
 
     sequential (clock) {
-        if (port_a.write_enable)[0] storage[native_address_a][7:0]   <= (port_a.data)[7:0];
-        if (port_a.write_enable)[1] storage[native_address_a][15:8]  <= (port_a.data)[15:8];
-        if (port_a.write_enable)[2] storage[native_address_a][23:16] <= (port_a.data)[23:16];
-        if (port_a.write_enable)[3] storage[native_address_a][31:24] <= (port_a.data)[31:24];
+        if (port_a.write_enable)[0] storage[native_address_a][7:0]   <- (port_a.data)[7:0];
+        if (port_a.write_enable)[1] storage[native_address_a][15:8]  <- (port_a.data)[15:8];
+        if (port_a.write_enable)[2] storage[native_address_a][23:16] <- (port_a.data)[23:16];
+        if (port_a.write_enable)[3] storage[native_address_a][31:24] <- (port_a.data)[31:24];
 
-        if (port_a.write_enable)[4] storage[native_address_a][39:32] <= (port_a.data)[39:32];
-        if (port_a.write_enable)[5] storage[native_address_a][47:40] <= (port_a.data)[47:40];
-        if (port_a.write_enable)[6] storage[native_address_a][55:48] <= (port_a.data)[55:48];
-        if (port_a.write_enable)[7] storage[native_address_a][63:56] <= (port_a.data)[63:56];
+        if (port_a.write_enable)[4] storage[native_address_a][39:32] <- (port_a.data)[39:32];
+        if (port_a.write_enable)[5] storage[native_address_a][47:40] <- (port_a.data)[47:40];
+        if (port_a.write_enable)[6] storage[native_address_a][55:48] <- (port_a.data)[55:48];
+        if (port_a.write_enable)[7] storage[native_address_a][63:56] <- (port_a.data)[63:56];
 
-        if (port_b.write_enable)[0] storage[native_address_b][7:0]   <= (port_b.data)[7:0];
-        if (port_b.write_enable)[1] storage[native_address_b][15:8]  <= (port_b.data)[15:8];
-        if (port_b.write_enable)[2] storage[native_address_b][23:16] <= (port_b.data)[23:16];
-        if (port_b.write_enable)[3] storage[native_address_b][31:24] <= (port_b.data)[31:24];
+        if (port_b.write_enable)[0] storage[native_address_b][7:0]   <- (port_b.data)[7:0];
+        if (port_b.write_enable)[1] storage[native_address_b][15:8]  <- (port_b.data)[15:8];
+        if (port_b.write_enable)[2] storage[native_address_b][23:16] <- (port_b.data)[23:16];
+        if (port_b.write_enable)[3] storage[native_address_b][31:24] <- (port_b.data)[31:24];
 
-        if (port_b.write_enable)[4] storage[native_address_b][39:32] <= (port_b.data)[39:32];
-        if (port_b.write_enable)[5] storage[native_address_b][47:40] <= (port_b.data)[47:40];
-        if (port_b.write_enable)[6] storage[native_address_b][55:48] <= (port_b.data)[55:48];
-        if (port_b.write_enable)[7] storage[native_address_b][63:56] <= (port_b.data)[63:56];
+        if (port_b.write_enable)[4] storage[native_address_b][39:32] <- (port_b.data)[39:32];
+        if (port_b.write_enable)[5] storage[native_address_b][47:40] <- (port_b.data)[47:40];
+        if (port_b.write_enable)[6] storage[native_address_b][55:48] <- (port_b.data)[55:48];
+        if (port_b.write_enable)[7] storage[native_address_b][63:56] <- (port_b.data)[63:56];
     }
 
     // In Vivado synthesis, different reads from the same memory should be in separate blocks. In the future should do this automatically in the backend
-    sequential (clock) port_b_out <= storage[native_address_b];
-    sequential (clock) port_a_out <= storage[native_address_a];
+    sequential (clock) port_b_out <- storage[native_address_b];
+    sequential (clock) port_a_out <- storage[native_address_a];
 }
 
 Opcode :: enum[7] {

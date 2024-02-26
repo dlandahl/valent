@@ -255,7 +255,7 @@ parse_statement :: () -> *Ast_Node {
             return decl;
         }
 
-        if peek(.EQUALS, .OPERATOR_LESS_OR_EQUAL, .OPERATOR_DOT, .OPEN_BRACKET, distance = 2) {
+        if peek(.EQUALS, .SEQUENTIAL_ASSIGNMENT, .OPERATOR_DOT, .OPEN_BRACKET, distance = 2) {
             return parse_assignment();
         }
 
@@ -381,7 +381,7 @@ parse_lvalue :: (parsing_dot := false) -> *Ast_Node {
 parse_assignment :: () -> *Ast_Assignment {
     lhs: *Ast_Node = parse_lvalue();
 
-    op := expect(.EQUALS, .OPERATOR_LESS_OR_EQUAL);
+    op := expect(.EQUALS, .SEQUENTIAL_ASSIGNMENT);
     ass := Make_Ast(Ast_Assignment);
 
     if allow(.COMMA) {
@@ -1190,6 +1190,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
       case #char "<";
         cursor += 1;
         if      current() == #char "="  Emit(.OPERATOR_LESS_OR_EQUAL);
+        else if current() == #char "-"  Emit(.SEQUENTIAL_ASSIGNMENT);
         else if current() == #char "<" {
             cursor += 1;
             if current() == #char "<" Emit(.OPERATOR_SHIFT_LEFT_ARITH);
