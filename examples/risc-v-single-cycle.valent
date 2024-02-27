@@ -9,10 +9,9 @@ Processor :: module (
     bus: wire[Memory_Interface],
 ) {
 
+    // Alternate cycles for instruction execution and waiting for memory latency
     Mode :: enum[1] { EXECUTE; MEMORY; }
     mode: flipflop[Mode];
-
-    // Alternate cycles for instruction execution and waiting for memory latency
 
     sequential (clock) {
         if reset mode <- Mode.EXECUTE;
@@ -184,7 +183,7 @@ Processor :: module (
         }
 
         alu_result =,trunc alu_lhs + alu_rhs;
-        funct7 = instruction.funct7 > 0;
+        funct7 = instruction.funct7 > 0 && !use_immediate;
 
         if opcode == Opcode.OP || opcode == Opcode.OP_IMM || opcode == Opcode.OP_32 || opcode == Opcode.OP_IMM_32 {
             switch instruction.funct3 {
@@ -215,8 +214,8 @@ Processor :: module (
 }
 
 Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: flipflop[16]) {
-    processor: Processor(clock, reset);
 
+    processor: Processor(clock, reset);
     storage: Block_Ram(clock);
 
     combinational {
@@ -243,8 +242,8 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: fl
 
 
 
-    MMIO_ADDRESS_SWITCHES :: 'h40;
-    MMIO_ADDRESS_LEDS     :: 'h48;
+    MMIO_ADDRESS_SWITCHES :: 'h100;
+    MMIO_ADDRESS_LEDS     :: 'h108;
 
     sequential (clock) {
         if processor.bus.address == MMIO_ADDRESS_LEDS && (processor.bus.write_enable)[1:0] == 2'b11 {
@@ -265,11 +264,12 @@ Memory_Interface :: register {
 
 Block_Ram :: module (
     clock: wire,
+
     port_a: wire[Memory_Interface],
-    port_b: wire[Memory_Interface]
+    port_b: wire[Memory_Interface],
 ) -> (
     port_a_out: flipflop[64],
-    port_b_out: flipflop[64]
+    port_b_out: flipflop[64],
 ) {
     // 2-port BRAM, port A is used for data, port B for instructions
 
@@ -293,7 +293,9 @@ Block_Ram :: module (
         if (port_a.write_enable)[5] storage[native_address_a][47:40] <- (port_a.data)[47:40];
         if (port_a.write_enable)[6] storage[native_address_a][55:48] <- (port_a.data)[55:48];
         if (port_a.write_enable)[7] storage[native_address_a][63:56] <- (port_a.data)[63:56];
+    }
 
+    sequential (clock) {
         if (port_b.write_enable)[0] storage[native_address_b][7:0]   <- (port_b.data)[7:0];
         if (port_b.write_enable)[1] storage[native_address_b][15:8]  <- (port_b.data)[15:8];
         if (port_b.write_enable)[2] storage[native_address_b][23:16] <- (port_b.data)[23:16];
@@ -336,10 +338,10 @@ Funct :: enum[3] {
 
     BRANCH_BEQ  :: 'b000;
     BRANCH_BNE  :: 'b001;
-    BRANCH_BLT  :: 'b010;
-    BRANCH_BGE  :: 'b011;
-    BRANCH_BLTU :: 'b100;
-    BRANCH_BGEU :: 'b101;
+    BRANCH_BLT  :: 'b100;
+    BRANCH_BGE  :: 'b101;
+    BRANCH_BLTU :: 'b110;
+    BRANCH_BGEU :: 'b111;
 
     LOAD_LB     :: 'b000;
     LOAD_LH     :: 'b001;

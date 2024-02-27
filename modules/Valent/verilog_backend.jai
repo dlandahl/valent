@@ -91,14 +91,9 @@ generate_module :: (decl: *Ast_Declaration) {
             for module.outputs {
                 if it_index < instance.outputs.count continue;
 
-                write_verilog("reg ");
-                write_bus_width(it);
-                write_verilog("%__%;\n", decl.name, it.name);
-
                 write_verilog("wire ");
                 write_bus_width(it);
-                write_verilog("__%__%;\n", decl.name, it.name);
-                write_verilog("always @* %1__%2 = __%1__%2;\n", decl.name, it.name);
+                write_verilog("%__%;\n", decl.name, it.name);
             }
 
             write_verilog("% %(", instance.ident.name, decl.name);
@@ -127,7 +122,7 @@ generate_module :: (decl: *Ast_Declaration) {
             for module.outputs {
                 if it_index < instance.outputs.count continue;
 
-                write_verilog("__%__%", decl.name, it.name);
+                write_verilog("%__%", decl.name, it.name);
                 if it_index != module.outputs.count-1 write_verilog(", ");
             }
 

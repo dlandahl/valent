@@ -1,17 +1,23 @@
 
 PROGRAM :: #string END
 
-MMIO_SWITCHES : *u64 : xx 0x40;
-MMIO_LEDS     : *u64 : xx 0x48;
+MMIO_SWITCHES : *u64 : xx 0x100;
+MMIO_LEDS     : *u64 : xx 0x108;
 
 #program_export
 main :: () {
     while true {
-        switches := MMIO_SWITCHES.*;
-        low: u64 = switches & 0xff;
-        high: u64 = switches >> 8;
+        f, f_1, f_2: u64 = 1, 1, 0;
 
-        MMIO_LEDS.* = low + high;
+        N := MMIO_SWITCHES.*;
+
+        if N for 0..N-1 {
+            f = f_1 + f_2;
+            f_2 = f_1;
+            f_1 = f;
+        }
+
+        MMIO_LEDS.* = f;
     }
 }
 
@@ -42,7 +48,7 @@ build :: () {
     options.entry_point_name = "main";
     options.output_path = ".build";
 
-    set_optimization(*options, .OPTIMIZED_VERY_SMALL, true);
+    set_optimization(*options, .VERY_OPTIMIZED, true);
     set_build_options(options, workspace);
 
     compiler_begin_intercept(workspace);
