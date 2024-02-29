@@ -27,6 +27,7 @@
 
     generate_verilog(p, "Processor");
     generate_verilog(p, "Block_Ram");
+    generate_verilog(p, "Uart_Tx_Ctrl");
     generate_verilog(p, "Controller");
 }
 

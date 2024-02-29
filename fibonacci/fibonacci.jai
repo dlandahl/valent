@@ -1,25 +1,40 @@
 
 PROGRAM :: #string END
 
-MMIO_SWITCHES : *u64 : xx 0x100;
-MMIO_LEDS     : *u64 : xx 0x108;
+MMIO_SWITCHES :: cast(*u64) 0x100;
+MMIO_LEDS     :: cast(*u64) 0x108;
+MMIO_UART     :: cast(*Uart_Control) 0x110;
+MMIO_BUTTONS  :: cast(*u64) 0x118; // Up left down right
+
+Uart_Control :: struct {
+    byte: u64;
+
+    flags: enum_flags u64 {
+        READY;   // Asserted by hardware when nothing is currently being transferred
+        EXECUTE; // Asserted by software when transfer should start
+    }
+}
 
 #program_export
 main :: () {
     while true {
-        f, f_1, f_2: u64 = 1, 1, 0;
+        byte := cast,trunc(u8) MMIO_SWITCHES.*;
 
-        N := MMIO_SWITCHES.*;
-
-        if N for 0..N-1 {
-            f = f_1 + f_2;
-            f_2 = f_1;
-            f_1 = f;
+        flags := MMIO_UART.flags;
+        while !(flags & .READY) {
+            flags = MMIO_UART.flags;
         }
 
-        MMIO_LEDS.* = f;
+        MMIO_UART.* = .{
+            byte = byte,
+            flags = .EXECUTE,
+        };
     }
 }
+
+// #program_export __muldi3 :: () {}
+#program_export memset :: () {}
+#program_export to_string :: () {}
 
 END;
 
@@ -42,13 +57,16 @@ build :: () {
     options.output_executable_name = "fibonacci";
     options.llvm_options.output_bitcode = true;
     options.llvm_options.function_sections = true;
+    options.llvm_options.bitcode_optimization_setting = .O0;
+    // options.llvm_options.machine_code_optimization_setting = .NONE;
+    // options.llvm_options.output_bitcode_before_optimizations = true;
     options.import_path = .["risc-v_modules"];
 
     options.cpu_target = .CUSTOM;
     options.entry_point_name = "main";
     options.output_path = ".build";
 
-    set_optimization(*options, .VERY_OPTIMIZED, true);
+    // set_optimization(*options, .DEBUG, true);
     set_build_options(options, workspace);
 
     compiler_begin_intercept(workspace);
@@ -61,15 +79,20 @@ build :: () {
 
     compiler_end_intercept(workspace);
 
-    run("llc -filetype=obj .build/fibonacci.bc -o .build/fibonacci.o -march riscv64 --function-sections");
-    run("riscv64-unknown-elf-ld -T linker.lds -o .build/fibonacci_linked.o .build/fibonacci.o");
-    run("riscv64-unknown-elf-objcopy -O binary .build/fibonacci_linked.o .build/fibonacci.bin");
+    // run("/home/dlandahl/llvm16/bin/opt .build/fibonacci.bc -o .build/fibonacci_opt.bc --Oz");
 
-    binary := cast([] u8) read_entire_file(".build/fibonacci.bin");
+    // run("/home/dlandahl/llvm16/bin/llc -filetype=obj .build/fibonacci.bc -o .build/fibonacci.o -march riscv64 --function-sections --O2");
+    // run("riscv64-unknown-elf-ld -T linker.lds -o .build/fibonacci_linked.o .build/fibonacci.o");
+    // run("riscv64-unknown-elf-objcopy -O binary .build/fibonacci_linked.o .build/fibonacci.bin");
+
+    run("riscv64-unknown-elf-gcc -mabi=lp64 -march=rv64i -mno-relax -nostdlib -nostartfiles -nodefaultlibs -ffreestanding -O2 -c -o .build/uart_test.o uart_test.c");
+    run("riscv64-unknown-elf-objcopy -O binary .build/uart_test.o .build/uart_test.bin");
+
+    binary := cast([] u8) read_entire_file(".build/uart_test.bin");
     hex_data := format_hex_words(binary);
 
     write_entire_file("program.mem", hex_data);
-    run("riscv64-unknown-elf-objdump --disassemble=main .build/fibonacci_linked.o");
+    run("riscv64-unknown-elf-objdump --disassemble=main .build/uart_test.o");
 
     set_build_options_dc(.{do_output = false});
 }

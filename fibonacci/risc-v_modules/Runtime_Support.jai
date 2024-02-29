@@ -171,34 +171,6 @@ set_initial_data :: (ts: *Temporary_Storage, count: s64, data: *u8) #no_context 
 
 #add_context using base: Context_Base;
 
-#if OS_IS_UNIX {
-    crt :: #system_library "libc";
-    #if OS == .MACOS || OS == .IOS {
-        pthreads :: #system_library "libc";
-    } else {
-        pthreads :: #system_library "libpthread";
-    }
-
-    pthread_mutex_lock    :: (mutex: *_pthread_mutex_t) -> s32 #foreign pthreads;
-    pthread_mutex_unlock  :: (mutex: *_pthread_mutex_t) -> s32 #foreign pthreads;
-
-    write :: (fd: s32, buf: *void, count: u64) -> s64 #foreign crt;
-
-    // Our mutex / critical sections are just dummies to hold as much memory as we need, so we don't bloat Runtime_Support.
-    // @Volatile: These types have to fit the real declarations on each platform!
-    #if OS == .MACOS || OS == .IOS {
-        _pthread_mutex_t :: struct {
-            __sig:    s64;
-            __opaque: [56] u8;
-        }
-    } else {
-        _pthread_mutex_t :: struct {
-            memory: [40] u8;
-        }
-    }
-
-    write_string_mutex: _pthread_mutex_t;
-}
 
 synch_initted: s32 = 0;
 

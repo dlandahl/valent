@@ -213,17 +213,20 @@ Processor :: module (
     }
 }
 
-Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: flipflop[16]) {
+Controller :: module (clock: wire, reset: wire, switches: wire[16], buttons: wire[4]) -> (leds: flipflop[16], uart_tx: wire) {
 
     processor: Processor(clock, reset);
     storage: Block_Ram(clock);
 
     combinational {
         storage.port_a = processor.bus;
-        processor.data_in = storage.port_a_out;
 
-        if processor.bus.address == MMIO_ADDRESS_SWITCHES {
-            processor.data_in = { 48'b0, switches };
+        processor.data_in = storage.port_a_out; // Todo add default cases
+
+        switch processor.bus.address {
+            case MMIO_ADDRESS_SWITCHES processor.data_in = { 48'b0, switches };
+            case MMIO_ADDRESS_UART+8   processor.data_in = { 63'b0, uart.ready };
+            case MMIO_ADDRESS_BUTTONS  processor.data_in = { 60'b0, buttons };
         }
 
         // Because instructions are 32bit but the memory bus is 64bit, the PC will sometimes point to the high bits in the instruction bus.
@@ -244,16 +247,31 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16]) -> (leds: fl
 
     MMIO_ADDRESS_SWITCHES :: 'h100;
     MMIO_ADDRESS_LEDS     :: 'h108;
+    MMIO_ADDRESS_UART     :: 'h110;
+    MMIO_ADDRESS_BUTTONS  :: 'h120;
 
     sequential (clock) {
-        if processor.bus.address == MMIO_ADDRESS_LEDS && (processor.bus.write_enable)[1:0] == 2'b11 {
-            leds <- (processor.bus.data)[15:0];
+        uart_send <- 0;
+
+        if (processor.bus.write_enable)[1:0] == 2'b11 {
+            switch processor.bus.address {
+                case MMIO_ADDRESS_LEDS   leds      <- (processor.bus.data)[15:0];
+                case MMIO_ADDRESS_UART   uart_data <- (processor.bus.data)[7:0];
+                case MMIO_ADDRESS_UART+8 uart_send <- (processor.bus.data)[1];
+            }
         }
 
         if reset {
             leds <- 0;
         }
     }
+
+    uart: Uart_Tx_Ctrl(clock, uart_send, uart_data);
+    combinational uart_tx = uart.uart_tx; // Todo allow passing parameters by name
+
+    // Todo, allow registered module inputs
+    uart_send: flipflop;
+    uart_data: flipflop[8];
 }
 
 Memory_Interface :: register {
@@ -355,4 +373,91 @@ Funct :: enum[3] {
     STORE_SH    :: 'b001;
     STORE_SW    :: 'b010;
     STORE_SD    :: 'b011;
+}
+
+Uart_Tx_Ctrl :: module (
+    clock: wire,
+    send: wire,
+    data: wire[8]
+  ) -> (
+    ready: wire,
+    uart_tx: flipflop
+  ) {
+
+    Uart_Frame :: register {
+        stop_bit;
+        data[8];
+        start_bit;
+    }
+
+    tx_data: flipflop[Uart_Frame];
+
+    // When `send` goes high, latch signal to be sent into the `tx_data` register
+    sequential (clock) {
+        if send tx_data <- { 1'b1, data, 1'b0 };
+    }
+
+
+    Tx_State :: enum[2] {
+       RDY;
+       LOAD_BIT;
+       SEND_BIT;
+    }
+
+    tx_state: flipflop[Tx_State];
+
+    // Keep track of the current send state (wait for baud, send, standby)
+    // and update the output transfer value
+    sequential (clock) {
+        switch tx_state {
+            case Tx_State.RDY {
+                uart_tx <- 1;
+                if send tx_state <- Tx_State.LOAD_BIT;
+            }
+
+            case Tx_State.LOAD_BIT {
+                uart_tx <- (tx_data >> bit_index)[0];
+                tx_state <- Tx_State.SEND_BIT;
+            }
+
+            case Tx_State.SEND_BIT {
+                if baud_done {
+                    if bit_index == BIT_INDEX_MAX
+                        tx_state <- Tx_State.RDY;
+                    else
+                        tx_state <- Tx_State.LOAD_BIT;
+                }
+            }
+        }
+    }
+
+    combinational ready = tx_state == Tx_State.RDY;
+
+
+    // Track which bit of tx_data should currently be sent
+    BIT_INDEX_MAX :: 10;
+    bit_index: flipflop[4];
+
+    sequential (clock) {
+        switch tx_state {
+            case Tx_State.RDY      bit_index <- 0;
+            case Tx_State.LOAD_BIT bit_index <-,trunc bit_index + 1;
+        }
+    }
+
+
+    // Counter to wait for the baud period
+    BAUD_TIMER_MAX :: 14'10416;
+
+    baud_timer: flipflop[14];
+    baud_done: wire;
+    combinational baud_done = baud_timer == BAUD_TIMER_MAX;
+
+    sequential (clock) {
+        if tx_state == Tx_State.RDY || baud_done {
+            baud_timer <- 0;
+        } else {
+            baud_timer <-,trunc baud_timer + 1;
+        }
+    }
 }

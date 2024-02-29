@@ -122,7 +122,7 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
                 if expr.kind == .IDENTIFIER {
                     ident := cast(*Ast_Identifier) expr;
 
-                    if ident.resolved_declaration && ident.resolved_declaration.driving_circuit != user_data {
+                    if ident.resolved_declaration && ident.resolved_declaration.driving_circuit != user_data && ident.datatype.primitive != .MEMORY {
                         if ident.resolved_declaration.driving_circuit != null {
                             semantic_error(expr, "Circuit elements may only be assigned in a single circuit block. The circuit element declared here:\n\n%\n\nis driven here:\n\n%\n\nbut it was already being assigned in this block:\n\n%", node_location_string(ident.resolved_declaration), node_location_string(ident), node_location_string(ident.resolved_declaration.driving_circuit));
                         }
@@ -451,34 +451,21 @@ typecheck_module_instantiation :: (module: *Ast_Module_Inst) {
     resolve_identifier(module.ident);
 
     if module.ident.datatype.primitive != .MODULE {
-        print("%\n", module.ident.datatype);
         semantic_error(module, "The name in this module instantiation does not refer to a module:\n\n%", node_location_string(module));
     }
 
     decl := cast(*Ast_Module) module.ident.resolved_declaration.expression;
     assert(decl.kind == .MODULE);
 
-    //if module.inputs.count != decl.inputs.count {
-    //    semantic_error(module, "Module '%' expects % inputs, but % are provided here:\n\n%\n\nDeclared here:\n\n%", module.ident.name, decl.inputs.count, module.inputs.count, node_location_string(module), node_location_string(decl));
-    //}
-//
-//    if module.outputs.count != decl.outputs.count {
-//        semantic_error(module, "Module '%' expects % outputs, but % are provided here:\n\n%\n\nDeclared here:\n\n%", module.ident.name, decl.outputs.count, module.outputs.count, node_location_string(module), node_location_string(decl));
-//    }
-
     for *module.inputs {
         resolve_identifier(it);
-
-        if it.datatype.primitive != .WIRE {
-            semantic_error(it, "Each input to a module instance must be a wire.\n\n%", node_location_string(it));
-        }
     }
 
     for *module.outputs {
         resolve_identifier(it);
 
         if it.datatype.primitive != .WIRE {
-            semantic_error(it, "Each output to a module instance must be a wire.\n\n%", node_location_string(it));
+            semantic_error(it, "Outputs from a module instance must be bound to a wire.\n\n%", node_location_string(it));
         }
     }
 }
@@ -908,6 +895,8 @@ Walk_Statements :: (block: *Ast_Block, $code: Code, $deferred: Code = #code {}, 
 
 semantic_error :: (ast: *Ast_Node, report: string, format: .. Any) {
     print("\nError: %\n", tprint(report, .. format));
+
+    if OS == .LINUX print("\n"); // It seems like Windows puts a newline before a process ends and Linux doesn't.
 
     exit(1);
 }
