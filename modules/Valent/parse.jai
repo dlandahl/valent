@@ -18,13 +18,14 @@ Parser :: struct {
 
     block_stack: [..] *Ast_Block;
 
-    source_code_lines: [] string;
-
     error: bool;
-    wanted: [] Token_Kind;
-    got: Token_Kind;
-    custom_report: string;
-    error_location: Source_Location;
+
+    using error_info: struct {
+        wanted: [] Token_Kind;
+        got: Token_Kind;
+        custom_report: string;
+        error_location: Source_Location;
+    }
 }
 
 #add_context parser: Parser;
@@ -183,17 +184,11 @@ get_operator_info :: (token: Token_Kind) -> *Binary_Operator_Info {
     return null;
 }
 
-parse :: (tokens: [] Token) -> *Ast_Block {
+parse :: (file: Tokenized_Source_File, top_level: *Ast_Block) {
     parser := *context.parser;
-    parser.tokens = tokens;
-
-    top_level := Make_Ast(Ast_Block);
-    top_level.block_type = .TOP_LEVEL;
+    parser.tokens = file.tokens;
 
     push_block(top_level);
-
-    statements: [..] *Ast_Node;
-    defer top_level.statements = statements;
 
     while true {
         if allow(.EOT) {
@@ -204,7 +199,7 @@ parse :: (tokens: [] Token) -> *Ast_Block {
 
         if s {
             check_statement_allowed_in_block(s);
-            array_add(*statements, s);
+            array_add(*top_level.statements, s);
         }
 
         if parser.error {
@@ -217,7 +212,7 @@ parse :: (tokens: [] Token) -> *Ast_Block {
             }
 
             loc := context.parser.error_location;
-            line := context.parser.source_code_lines[loc.line];
+            line := file.lines[loc.line];
 
             first := line;
             first.count = loc.start_char;
@@ -231,13 +226,10 @@ parse :: (tokens: [] Token) -> *Ast_Block {
             third.count -= loc.end_char;
 
             print("\n(line %): %[31m%[0m%\n", loc.line, first, second, third);
-
-            return top_level;
         }
     }
 
     pop_block();
-    return top_level;
 }
 
 parse_statement :: () -> *Ast_Node {
@@ -979,18 +971,21 @@ Tokenizer :: struct {
     line: int;
 }
 
-tokenize :: (source: string) -> [] Token {
+tokenize :: (source_file: Source_File) -> Tokenized_Source_File {
+    result: Tokenized_Source_File;
+
     output_token_stream: [..] Token;
 
     tokenizer: Tokenizer;
-    tokenizer.source = source;
+    tokenizer.source = source_file.code;
 
-    context.parser.source_code_lines = split(source, "\n");
+    result.lines = split(source_file.code, "\n");
 
-    array_reserve(*output_token_stream, source.count / 4);
+    array_reserve(*output_token_stream, source_file.code.count / 4);
 
     while true {
         token := get_next_token(*tokenizer);
+        token.location.filename = source_file.name;
         array_add(*output_token_stream, token);
 
         if token.kind == .ERROR break;
@@ -1007,8 +1002,8 @@ tokenize :: (source: string) -> [] Token {
 
             lexer: Jai.Lexer;
             lexer_input: string;
-            lexer_input.data = source.data + tokenizer.cursor;
-            lexer_input.count = source.count - tokenizer.cursor;
+            lexer_input.data = source_file.code.data + tokenizer.cursor;
+            lexer_input.count = source_file.code.count - tokenizer.cursor;
 
             Jai.set_input_from_string(*lexer, lexer_input);
             brace_level: int;
@@ -1045,8 +1040,9 @@ tokenize :: (source: string) -> [] Token {
             tokenizer.cursor += jai_code.count;
         }
     }
-
-    return output_token_stream;
+ 
+    result.tokens = output_token_stream;
+    return result;
 }
 
 peek_token :: (tokenizer: *Tokenizer) -> Token {

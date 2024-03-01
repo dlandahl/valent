@@ -20,9 +20,12 @@
     // run_yosys_command("dump");
     // return;
 
-    riscv := read_entire_file("examples/risc-v-single-cycle.valent");
+    filenames :: string.["examples/risc-v-single-cycle.valent", "examples/uart.valent"];
 
-    p, success := compile(riscv);
+    files: [..] Source_File;
+    for filenames array_add(*files, .{ it, read_entire_file(it) });
+
+    p, success := compile(.. files);
     if !success return;
 
     generate_verilog(p, "Processor");

@@ -36,6 +36,8 @@ Typechecker :: struct {
     current_block: *Ast_Block;
     block_stack: [..] *Ast_Block;
     in_progress: [..] *Ast_Node;
+
+    program: *Program;
 }
 
 #add_context typechecker: Typechecker;
@@ -903,7 +905,10 @@ semantic_error :: (ast: *Ast_Node, report: string, format: .. Any) {
 
 node_location_string :: (node: *Ast_Node) -> string {
     loc := node.location;
-    line := context.parser.source_code_lines[loc.line];
+
+    file := table_find_pointer(*context.typechecker.program.files, loc.filename);
+    assert(file != null);
+    line := file.lines[loc.line];
 
     first := line;
     first.count = loc.start_char;

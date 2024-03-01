@@ -68,7 +68,7 @@ Ast_Block :: struct {
     using #as node: Ast_Node;
     node.kind = .BLOCK;
 
-    statements: [] *Ast_Node;
+    statements: [..] *Ast_Node;
     parent: *Ast_Block;
     block_type: Block_Type;
 }
@@ -380,4 +380,6 @@ Source_Location :: struct {
     line: int;
     start_char: int;
     end_char: int;
+
+    filename: string;
 }

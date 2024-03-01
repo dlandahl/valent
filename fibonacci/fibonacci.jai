@@ -10,8 +10,8 @@ Uart_Control :: union {
     data: u8;
 
     flags: enum_flags u64 {
-        READY     :: 1 << 8; // Asserted by hardware when nothing is currently being transferred
-        EXECUTE   :: 1 << 9; // Asserted by software when transfer should start
+        READY     :: 1 << 8; // Set by hardware when nothing is currently being transferred
+        EXECUTE   :: 1 << 9; // Set by software when transfer should start
     }
 }
 

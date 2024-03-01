@@ -4,6 +4,7 @@
 #import "File";
 #import "File_Utilities";
 #import "Bit_Operations";
+#import "Hash_Table";
 
 #load "runtime_shared.jai";
 #load "typecheck.jai";
@@ -18,19 +19,43 @@
 
 Program :: struct {
     ast: *Ast_Block;
+    files: Table(string, Tokenized_Source_File);
 }
 
-compile :: (code: string) -> Program, bool {
+Source_File :: struct {
+    name: string;
+    code: string;
+}
+
+Tokenized_Source_File :: struct {
+    using #as file: Source_File;
+
+    tokens: [] Token;
+    lines: [] string;
+}
+
+compile :: (files: .. Source_File) -> Program, bool {
     p: Program;
 
-    tokens := tokenize(code);
-    ast := parse(tokens);
+    top_level := Make_Ast(Ast_Block);
+    top_level.block_type = .TOP_LEVEL;
 
-    if context.parser.error return .{}, false;
+    for files {
+        context.parser.token_index = 0;
 
-    typecheck_block(ast);
+        tokenized := tokenize(it);
 
-    p.ast = ast;
+        parse(tokenized, top_level);
+
+        table_add(*p.files, it.name, tokenized);
+
+        if context.parser.error return .{}, false;
+    }
+
+    context.typechecker.program = *p;
+    typecheck_block(top_level);
+
+    p.ast = top_level;
     return p, true;
 }
 
