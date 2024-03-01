@@ -8,8 +8,8 @@ Processor :: module (
     pc: flipflop[64],
     bus: wire[Memory_Interface],
 ) {
-
     // Alternate cycles for instruction execution and waiting for memory latency
+
     Mode :: enum[1] { EXECUTE; MEMORY; }
     mode: flipflop[Mode];
 
@@ -225,7 +225,7 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16], buttons: wir
 
         switch processor.bus.address {
             case MMIO_ADDRESS_SWITCHES processor.data_in = { 48'b0, switches };
-            case MMIO_ADDRESS_UART+8   processor.data_in = { 63'b0, uart.ready };
+            case MMIO_ADDRESS_UART     processor.data_in = { 55'b0, uart.ready, 8'b0 };
             case MMIO_ADDRESS_BUTTONS  processor.data_in = { 60'b0, buttons };
         }
 
@@ -248,16 +248,19 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16], buttons: wir
     MMIO_ADDRESS_SWITCHES :: 'h100;
     MMIO_ADDRESS_LEDS     :: 'h108;
     MMIO_ADDRESS_UART     :: 'h110;
-    MMIO_ADDRESS_BUTTONS  :: 'h120;
+    MMIO_ADDRESS_BUTTONS  :: 'h118;
 
     sequential (clock) {
         uart_send <- 0;
 
         if (processor.bus.write_enable)[1:0] == 2'b11 {
             switch processor.bus.address {
-                case MMIO_ADDRESS_LEDS   leds      <- (processor.bus.data)[15:0];
-                case MMIO_ADDRESS_UART   uart_data <- (processor.bus.data)[7:0];
-                case MMIO_ADDRESS_UART+8 uart_send <- (processor.bus.data)[1];
+                case MMIO_ADDRESS_LEDS
+                    leds      <- (processor.bus.data)[15:0];
+                case MMIO_ADDRESS_UART {
+                    uart_data <- (processor.bus.data)[7:0];
+                    uart_send <- (processor.bus.data)[9];
+                }
             }
         }
 
