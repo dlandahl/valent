@@ -195,6 +195,8 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
                 typecheck_block(it.block, root_circuit);
             }
 
+            if switch.default typecheck_block(switch.default, root_circuit);
+
           case .SEQUENTIAL_CIRCUIT;
             seq := cast(*Ast_Sequential_Circuit) it;
             resolve_identifier(seq.clock);

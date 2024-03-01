@@ -114,6 +114,8 @@ Ast_Switch :: struct {
         compare: *Ast_Node;
         block: *Ast_Block;
     };
+
+    default: *Ast_Block;
 }
 
 Ast_If :: struct {

@@ -304,6 +304,10 @@ parse_statement :: () -> *Ast_Node {
             new.block = parse_block(parent.block_type);
         }
 
+        if allow(.KEYWORD_else) {
+            switch.default = parse_block(parent.block_type);
+        }
+
         expect(.CLOSED_BRACE);
         return switch;
     }

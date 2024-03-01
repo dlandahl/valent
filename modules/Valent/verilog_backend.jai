@@ -247,11 +247,17 @@ generate_statement :: (stmt: *Ast_Node) {
             write_verilog("%: ", value);
             
             if it.block.statements.count > 1 write_verilog("begin\n");
-
             generate_block(it.block);
-
             if it.block.statements.count > 1 write_verilog("end\n");
         }
+
+        if switch.default {
+            write_verilog("default: ");
+            if switch.default.statements.count > 1 write_verilog("begin\n");
+            generate_block(switch.default);
+            if switch.default.statements.count > 1 write_verilog("end\n");
+        }
+
         context.verilog.indentation_level -= 1;
 
         write_verilog("endcase\n");

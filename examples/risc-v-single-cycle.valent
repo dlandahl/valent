@@ -51,7 +51,6 @@ Processor :: module (
         U_immediate = { 33 # op[31], op[30:12], 12'b0 };
         J_immediate = { 44 # op[31], op[19:12], op[20], op[30:25], op[24:21], 1'b0 };
 
-        imm = 0;
         switch instruction.opcode {
             case Opcode.AUIPC  imm = U_immediate;
             case Opcode.LUI    imm = U_immediate;
@@ -64,6 +63,7 @@ Processor :: module (
             case Opcode.BRANCH imm = B_immediate;
             case Opcode.JAL    imm = J_immediate;
             case Opcode.JALR   imm = J_immediate;
+            else               imm = 0;
         }
     }
 
@@ -150,7 +150,7 @@ Processor :: module (
                 case Funct.STORE_SB bus.write_enable = 8'b01 << byte_offset;
                 case Funct.STORE_SH bus.write_enable = 8'b11 << byte_offset;
                 case Funct.STORE_SW bus.write_enable = 8'h0f << byte_offset;
-                case Funct.STORE_SD bus.write_enable = 8'hff;
+                else                bus.write_enable = 8'hff;
             }
         }
 
@@ -199,6 +199,7 @@ Processor :: module (
                 case Funct.OP_XOR  alu_result       = alu_lhs ^  alu_rhs;
                 case Funct.OP_OR   alu_result       = alu_lhs |  alu_rhs;
                 case Funct.OP_AND  alu_result       = alu_lhs &  alu_rhs;
+                else               alu_result =,trunc alu_lhs +  alu_rhs;
             }
         }
 
@@ -209,6 +210,7 @@ Processor :: module (
             case Funct.BRANCH_BGE  alu_result = { 63'b0, alu_lhs >= alu_rhs }; // Todo: sign
             case Funct.BRANCH_BLTU alu_result = { 63'b0, alu_lhs <  alu_rhs };
             case Funct.BRANCH_BGEU alu_result = { 63'b0, alu_lhs >= alu_rhs };
+            else                   alu_result = 0;
         }
     }
 }
@@ -221,12 +223,11 @@ Controller :: module (clock: wire, reset: wire, switches: wire[16], buttons: wir
     combinational {
         storage.port_a = processor.bus;
 
-        processor.data_in = storage.port_a_out; // Todo add default cases
-
         switch processor.bus.address {
             case MMIO_ADDRESS_SWITCHES processor.data_in = { 48'b0, switches };
             case MMIO_ADDRESS_UART     processor.data_in = { 55'b0, uart.ready, 8'b0 };
             case MMIO_ADDRESS_BUTTONS  processor.data_in = { 60'b0, buttons };
+            else                       processor.data_in = storage.port_a_out;
         }
 
         // Because instructions are 32bit but the memory bus is 64bit, the PC will sometimes point to the high bits in the instruction bus.
