@@ -1,4 +1,8 @@
 
+BAUD_RATE :: 9600;
+CLOCK_SPEED :: 100_000_000;
+CYCLES_PER_BAUD :: CLOCK_SPEED / BAUD_RATE;
+
 Uart_Tx_Ctrl :: module (
     clock: wire,
     send: wire,
@@ -71,11 +75,10 @@ Uart_Tx_Ctrl :: module (
 
 
     // Counter to wait for the baud period
-    BAUD_TIMER_MAX :: 14'10416;
 
-    baud_timer: flipflop[14];
+    baud_timer: flipflop[clog2(CYCLES_PER_BAUD)];
     baud_done: wire;
-    combinational baud_done = baud_timer == BAUD_TIMER_MAX;
+    combinational baud_done = baud_timer == CYCLES_PER_BAUD;
 
     sequential (clock) {
         if tx_state == Tx_State.RDY || baud_done {
@@ -83,5 +86,17 @@ Uart_Tx_Ctrl :: module (
         } else {
             baud_timer <-,trunc baud_timer + 1;
         }
+    }
+}
+
+jai {
+    clog2 :: (v: int) -> int {
+        r     := (cast(int) (v > 0xffff)) << 4; v >>= r;
+        shift := (cast(int) (v > 0xff  )) << 3; v >>= shift; r |= shift;
+        shift  = (cast(int) (v > 0xf   )) << 2; v >>= shift; r |= shift;
+        shift  = (cast(int) (v > 0x3   )) << 1; v >>= shift; r |= shift;
+        r |= (v >> 1);
+
+        return r + 1;
     }
 }

@@ -2,6 +2,8 @@
 #scope_module
 
 #import "Hash_Table";
+#import "Compiler";
+#import "Process";
 
 typecheck_module :: (module: *Ast_Module) {
     assert(module.constant_parameters.count == 0, "To do");
@@ -12,7 +14,7 @@ typecheck_module :: (module: *Ast_Module) {
         it.datatype = it.expression.datatype;
 
         if it.expression.datatype.primitive != .WIRE {
-            semantic_error(it, "Each input port of a module must a be wire or a bus of wires\n\n%", node_location_string(it));
+            semantic_error(it, "Each input port of a module must a be wire or a bus of wires\n\n%", loc_string(it));
         }
     }
 
@@ -22,7 +24,7 @@ typecheck_module :: (module: *Ast_Module) {
 
         // Todo: say what the type was
         if it.expression.datatype.primitive != .WIRE && it.expression.datatype.primitive != .FLIPFLOP {
-            semantic_error(it, "Each output port of a module must a be wire, a flipflop, or a bus of wires or flipflops\n\n%", node_location_string(it));
+            semantic_error(it, "Each output port of a module must a be wire, a flipflop, or a bus of wires or flipflops\n\n%", loc_string(it));
         }
     }
 
@@ -49,8 +51,13 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
         existing := table_find_pointer(*names, decl.name);
 
         if existing != null {
-            l1 := node_location_string(<< existing);
-            l2 := node_location_string(decl);
+            // Hack for Jai overloads
+            if existing.*.expression.kind == .JAI_CODE && decl.expression.kind == .JAI_CODE {
+                return;
+            }
+
+            l1 := loc_string(<< existing);
+            l2 := loc_string(decl);
             semantic_error(decl, "name '%' has multiple declarations in the same block.\n\n%\n\n%", decl.name, l1, l2);
         }
 
@@ -82,6 +89,13 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
         }
     }
 
+    for block.statements if it.kind == .JAI_CODE {
+        jai := cast(*Ast_Jai_Code) it;
+        typecheck_jai_code(jai);
+
+        for jai.declarations Duplication_Check(it);
+    }
+
     for block.statements {
         if it.kind == {
 
@@ -99,9 +113,9 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
 
             if block.block_type == {
                 case .SEQUENTIAL; if ass.type == .COMBINATIONAL
-                    semantic_error(ass, "Assignments in sequential blocks must be sequential assignments (<=)\n\n%", node_location_string(ass));
+                    semantic_error(ass, "Assignments in sequential blocks must be sequential assignments (<=)\n\n%", loc_string(ass));
                 case .COMBINATIONAL; if ass.type == .SEQUENTIAL
-                    semantic_error(ass, "Assignments in combinational blocks must be combinational assignments (=)\n\n%", node_location_string(ass));
+                    semantic_error(ass, "Assignments in combinational blocks must be combinational assignments (=)\n\n%", loc_string(ass));
                 case; assert(false);
             }
 
@@ -110,7 +124,7 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
             Walk_Expression(ass.target, #code {
                 if expr.kind == .LITERAL {
                     lit := cast(*Ast_Literal) expr;
-                    if lit.int_value != 0 semantic_error(lit, "Literals in lvalue concatenations must be zero - they only align the writable elements.\n\n%", node_location_string(lit));
+                    if lit.int_value != 0 semantic_error(lit, "Literals in lvalue concatenations must be zero - they only align the writable elements.\n\n%", loc_string(lit));
                 }
 
                 if expr.kind == .BINARY_OP {
@@ -124,12 +138,12 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
                 if expr.kind == .IDENTIFIER {
                     ident := cast(*Ast_Identifier) expr;
 
-                    if ident.resolved_declaration && ident.resolved_declaration.driving_circuit != user_data && ident.datatype.primitive != .MEMORY {
-                        if ident.resolved_declaration.driving_circuit != null {
-                            semantic_error(expr, "Circuit elements may only be assigned in a single circuit block. The circuit element declared here:\n\n%\n\nis driven here:\n\n%\n\nbut it was already being assigned in this block:\n\n%", node_location_string(ident.resolved_declaration), node_location_string(ident), node_location_string(ident.resolved_declaration.driving_circuit));
+                    if ident.declaration && ident.declaration.driving_circuit != user_data && ident.datatype.primitive != .MEMORY {
+                        if ident.declaration.driving_circuit != null {
+                            semantic_error(expr, "Circuit elements may only be assigned in a single circuit block. The circuit element declared here:\n\n%\n\nis driven here:\n\n%\n\nbut it was already being assigned in this block:\n\n%", loc_string(ident.declaration), loc_string(ident), loc_string(ident.declaration.driving_circuit));
                         }
 
-                        ident.resolved_declaration.driving_circuit = user_data;
+                        ident.declaration.driving_circuit = user_data;
                     }
                 }
             }, user_data = root_circuit);
@@ -137,20 +151,20 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
             typecheck_expression(ass.expr);
 
             if block.block_type == .SEQUENTIAL && ass.target.datatype.primitive != .FLIPFLOP {
-                semantic_error(ass, "Sequential blocks may only contain assignments to clocked elements (flipflops)\n\n%", node_location_string(ass));
+                semantic_error(ass, "Sequential blocks may only contain assignments to clocked elements (flipflops)\n\n%", loc_string(ass));
             }
 
             if block.block_type == .COMBINATIONAL && ass.target.datatype.primitive != .WIRE {
-                semantic_error(ass, "Combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", node_location_string(ass));
+                semantic_error(ass, "Combinational blocks may only contain assignments to unclocked elements (wires)\n\n%", loc_string(ass));
             }
 
             if ass.target.datatype.module_input {
-                semantic_error(ass, "A module input parameter must not be the target of an assignment\n\n%", node_location_string(ass.target));
+                semantic_error(ass, "A module input parameter must not be the target of an assignment\n\n%", loc_string(ass.target));
             }
 
             if ass.target.datatype.enum_def {
                 if ass.expr.datatype.enum_def != ass.target.datatype.enum_def {
-                    semantic_error(ass, "In this assignment, the left side has an enum tag, but the right side is not a member of that enum:\n\n%", node_location_string(ass)); // Todo say the name of the enum
+                    semantic_error(ass, "In this assignment, the left side has an enum tag, but the right side is not a member of that enum:\n\n%", loc_string(ass)); // Todo say the name of the enum
                 }
             }
 
@@ -188,7 +202,7 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
 
                 if switch.condition.datatype.enum_def {
                     if switch.condition.datatype.enum_def != it.compare.datatype.enum_def {
-                        semantic_error(it.compare, "This switch statement is over an enum value, so all cases should be values of that enum\n\n%", node_location_string(it.compare));
+                        semantic_error(it.compare, "This switch statement is over an enum value, so all cases should be values of that enum\n\n%", loc_string(it.compare));
                     }
                 }
 
@@ -207,8 +221,6 @@ typecheck_block :: (block: *Ast_Block, root_circuit: *Ast_Node = null) {
             typecheck_block(comb.block, comb);
 
           case .JAI_CODE;
-            jai := cast(*Ast_Jai_Code) it;
-            print("Found Jai code %\n", jai.code);
           case;
             assert(false);
         }
@@ -225,11 +237,11 @@ typecheck_expression :: (expr: *Ast_Node) {
             builder: String_Builder;
             defer free_buffers(*builder);
 
-            print_to_builder(*builder, "This expression is involved in a circular dependency:\n\n%\n\n", node_location_string(context.typechecker.in_progress[0]));
+            print_to_builder(*builder, "This expression is involved in a circular dependency:\n\n%\n\n", loc_string(context.typechecker.in_progress[0]));
 
             for context.typechecker.in_progress {
                 if it_index == 0 continue;
-                print_to_builder(*builder, "... % depends on\n%\n\n", ifx it_index == 1 then "it" else "which", node_location_string(it));
+                print_to_builder(*builder, "... % depends on\n%\n\n", ifx it_index == 1 then "it" else "which", loc_string(it));
             }
 
             print_to_builder(*builder, "which we've seen before.");
@@ -257,11 +269,11 @@ typecheck_expression :: (expr: *Ast_Node) {
       case .IDENTIFIER;
         id := cast(*Ast_Identifier) expr;
 
-        if !id.resolved_declaration {
+        if !id.declaration {
             resolve_identifier(id);
         }
 
-        id.datatype = id.resolved_declaration.datatype;
+        id.datatype = id.declaration.datatype;
 
       case .UNARY_OP;
         op := cast(*Ast_Unary_Op) expr;
@@ -275,11 +287,11 @@ typecheck_expression :: (expr: *Ast_Node) {
 
         if op.operation == .OPERATOR_DOT {
             if op.left.datatype.primitive != .ENUM && !op.left.datatype.register_def && op.left.datatype.primitive != .MODULE {
-                semantic_error(op, "Dot dereference (.) used on type '%', but only works on enums, registers, and modules.\n\n%", op.left.datatype.primitive, node_location_string(op));
+                semantic_error(op, "Dot dereference (.) used on type '%', but only works on enums, registers, and modules.\n\n%", op.left.datatype.primitive, loc_string(op));
             }
 
             if op.right.kind != .IDENTIFIER {
-                semantic_error(op, "Expected an identifier to the right of dot dereference (.):\n\n%", node_location_string(op));
+                semantic_error(op, "Expected an identifier to the right of dot dereference (.):\n\n%", loc_string(op));
             }
 
             ident := cast(*Ast_Identifier) op.right;
@@ -297,7 +309,7 @@ typecheck_expression :: (expr: *Ast_Node) {
                 }
 
                 if !found {
-                    semantic_error(op, "Name '%' was not found in the enum:\n\n%\n\nDeclared here:\n\n%", ident.name, node_location_string(op.right), node_location_string(op.left.datatype.enum_def.decl));
+                    semantic_error(op, "Name '%' was not found in the enum:\n\n%\n\nDeclared here:\n\n%", ident.name, loc_string(op.right), loc_string(op.left.datatype.enum_def.decl));
                 }
 
             } else if op.left.datatype.register_def != null {
@@ -310,7 +322,7 @@ typecheck_expression :: (expr: *Ast_Node) {
                 }
 
                 if field == null {
-                    semantic_error(op, "Name '%' was not found in the register:\n\n%\n\nDeclared here:\n\n%", ident.name, node_location_string(op.right), node_location_string(op.left.datatype.register_def.decl));
+                    semantic_error(op, "Name '%' was not found in the register:\n\n%\n\nDeclared here:\n\n%", ident.name, loc_string(op.right), loc_string(op.left.datatype.register_def.decl));
                 }
 
                 op.datatype.primitive = op.left.datatype.primitive;
@@ -323,10 +335,10 @@ typecheck_expression :: (expr: *Ast_Node) {
                 module_inst_name := cast(*Ast_Identifier) op.left;
 
                 resolve_identifier(module_inst_name);
-                module_inst := cast(*Ast_Module_Inst) module_inst_name.resolved_declaration.expression;
+                module_inst := cast(*Ast_Ident_With_Parameters) module_inst_name.declaration.expression;
 
                 resolve_identifier(module_inst.ident);
-                module := cast(*Ast_Module) module_inst.ident.resolved_declaration.expression;
+                module := cast(*Ast_Module) module_inst.ident.declaration.expression;
 
                 io_decl: *Ast_Declaration;
 
@@ -342,7 +354,7 @@ typecheck_expression :: (expr: *Ast_Node) {
                     }
                 }
 
-                if !io_decl semantic_error(op.left, "Could not find the port '%' on module '%', referenced here:\n\n%", ident.name, module_inst.ident.name, node_location_string(op));
+                if !io_decl semantic_error(op.left, "Could not find the port '%' on module '%', referenced here:\n\n%", ident.name, module_inst.ident.name, loc_string(op));
 
                 op.datatype = io_decl.datatype;
                 op.datatype.module_input = false;
@@ -395,7 +407,7 @@ typecheck_expression :: (expr: *Ast_Node) {
                         typecheck_expression(sel.left);
 
                         if sel.left.datatype.primitive != .CONSTANT && sel.left.datatype.primitive != .WIRE && sel.left.datatype.primitive != .FLIPFLOP {
-                            semantic_error(sel, "The left side of a fixed width bit selection should be a signal or a constant:\n\n%", node_location_string(sel));
+                            semantic_error(sel, "The left side of a fixed width bit selection should be a signal or a constant:\n\n%", loc_string(sel));
                         }
 
                         op.datatype.bit_width = right;
@@ -414,7 +426,6 @@ typecheck_expression :: (expr: *Ast_Node) {
         }
 
       case .BIT_SELECT;
-
       case .CONCAT;
         cat := cast(*Ast_Concat) expr;
         bit_width: int;
@@ -426,7 +437,7 @@ typecheck_expression :: (expr: *Ast_Node) {
             typecheck_expression(it);
 
             if it.datatype.bit_width == -1 {
-                semantic_error(cat, "All entries of a concatenation must have an explicit width, but this one doesn't\n\n%", node_location_string(it));
+                semantic_error(cat, "All entries of a concatenation must have an explicit width, but this one doesn't\n\n%", loc_string(it));
             }
             bit_width += it.datatype.bit_width;
 
@@ -444,32 +455,39 @@ typecheck_expression :: (expr: *Ast_Node) {
         mod := cast(*Ast_Module) expr;
         typecheck_module(mod);
 
-      case .MODULE_INSTANTIATION; #through;
+      case .IDENT_WITH_PARAMETERS;
+        ident := cast(*Ast_Ident_With_Parameters) expr;
+        resolve_identifier(ident.ident);
+
+        for ident.parameters {
+            typecheck_expression(it);
+        }
+
       case .MEMORY;
-        semantic_error(expr, "This kind of construct is not allowed in a general expression:\n\n%", node_location_string(expr)); // Todo say what it is
+        semantic_error(expr, "This kind of construct is not allowed in a general expression:\n\n%", loc_string(expr)); // Todo say what it is
       case; assert(false);
     }
 }
 
-typecheck_module_instantiation :: (module: *Ast_Module_Inst) {
+typecheck_module_instantiation :: (module: *Ast_Ident_With_Parameters) {
     resolve_identifier(module.ident);
 
     if module.ident.datatype.primitive != .MODULE {
-        semantic_error(module, "The name in this module instantiation does not refer to a module:\n\n%", node_location_string(module));
+        semantic_error(module, "The name in this module instantiation does not refer to a module:\n\n%", loc_string(module));
     }
 
-    decl := cast(*Ast_Module) module.ident.resolved_declaration.expression;
+    decl := cast(*Ast_Module) module.ident.declaration.expression;
     assert(decl.kind == .MODULE);
 
-    for *module.inputs {
-        resolve_identifier(it);
-    }
+    for module.parameters {
+        if it.kind != .IDENTIFIER {
+            semantic_error(it, "For the present, module parameters can only be identifiers:\n\n%", loc_string(it));
+        }
 
-    for *module.outputs {
-        resolve_identifier(it);
-
-        if it.datatype.primitive != .WIRE {
-            semantic_error(it, "Outputs from a module instance must be bound to a wire.\n\n%", node_location_string(it));
+        ident := cast(*Ast_Identifier) it;
+        resolve_identifier(ident);
+        if ident.datatype.primitive != .WIRE && ident.datatype.primitive != .FLIPFLOP {
+            semantic_error(ident, "Inputs to a module must be signals (type primitive was %):\n\n%", ident.datatype.primitive, loc_string(ident));
         }
     }
 }
@@ -483,7 +501,7 @@ check_bit_width :: (ast: *Ast_Node, left: Datatype, right: Datatype) -> int {
     if left.bit_width == -1 && right.bit_width == -1 return -1;
 
     if left.bit_width != right.bit_width {
-        loc := node_location_string(ast);
+        loc := loc_string(ast);
         semantic_error(ast, "bit widths do not match in this operation\n\n%\n\nLeft width is %, right is %", loc, left.bit_width, right.bit_width);
     }
 
@@ -499,7 +517,7 @@ evaluate_width_expression :: (expr: *Ast_Node) -> int, *Enum_Def, *Register_Def 
       case .ENUM;
         if expr.datatype.bit_width == -1 {
             ident := cast(*Ast_Identifier) expr;
-            semantic_error(expr, "This width expression uses an enum without a specific width, which is not permitted:\n\n%\n\nThis is the enum (use `enum[N]` here):\n\n%", node_location_string(expr), node_location_string(ident.resolved_declaration));
+            semantic_error(expr, "This width expression uses an enum without a specific width, which is not allowed:\n\n%\n\nThis is the enum (use `enum[N]` here):\n\n%", loc_string(expr), loc_string(ident.declaration));
         }
 
         return expr.datatype.bit_width, expr.datatype.enum_def, null;
@@ -526,8 +544,10 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
         if decl.datatype.register_def decl.datatype.register_def.decl = decl;
 
     } else {
-        typecheck_expression(decl.expression);
-        decl.datatype = decl.expression.datatype;
+        // if decl.expression.kind != .JAI_CODE {
+            typecheck_expression(decl.expression);
+            decl.datatype = decl.expression.datatype;
+        // }
     }
 
     decl.datatype.module_input = decl.module_input;
@@ -535,7 +555,7 @@ typecheck_declaration :: (decl: *Ast_Declaration) {
     prim := decl.datatype.primitive;
     if prim == .CONSTANT || (prim == .MODULE && decl.datatype.is_type) || prim == .ENUM {
         if !decl.constant {
-            semantic_error(decl, "Declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%", prim, node_location_string(decl)); // Todo: stringify type name
+            semantic_error(decl, "Declarations of type % must be constant. Use `name :: value` here instead of `name: type`\n\n%", prim, loc_string(decl)); // Todo: stringify type name
         }
     }
 
@@ -576,7 +596,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         if _enum.width {
             root.datatype.bit_width = evaluate_constant_expression(_enum.width);
             if root.datatype.bit_width < bits_needed {
-                semantic_error(root, "This enum requires % bits to represent its values, but has specifically been given a width of only %\n\n%\n", bits_needed, root.datatype.bit_width, node_location_string(_enum));
+                semantic_error(root, "This enum requires % bits to represent its values, but has specifically been given a width of only %\n\n%\n", bits_needed, root.datatype.bit_width, loc_string(_enum));
             }
         } else {
             root.datatype.bit_width = -1;
@@ -606,7 +626,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
                     new.enum_def = it.width_expr.datatype.enum_def;
                     if it.width_expr.datatype.bit_width == -1 {
                         ident := cast(*Ast_Identifier) it.width_expr;
-                        semantic_error(root, "This register contains an enum without a specific width:\n\n%\n\nThis is the enum (use `enum[N]` here):\n\n%", node_location_string(root), node_location_string(ident.resolved_declaration));
+                        semantic_error(root, "This register contains an enum without a specific width:\n\n%\n\nThis is the enum (use `enum[N]` here):\n\n%", loc_string(root), loc_string(ident.declaration));
                     }
                     new.width = it.width_expr.datatype.bit_width;
 
@@ -629,7 +649,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         if reg.width_expr {
             provided_width := evaluate_constant_expression(reg.width_expr);
             if total_width != provided_width {
-                semantic_error(reg, "This register has been given an explicit width of % bits, but is actually % bits wide:\n\n%", provided_width, total_width, node_location_string(reg.width_expr));
+                semantic_error(reg, "This register has been given an explicit width of % bits, but is actually % bits wide:\n\n%", provided_width, total_width, loc_string(reg.width_expr));
             }
         }
 
@@ -638,7 +658,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         op := cast(*Ast_Binary_Op) expr;
 
         if op.operation != .OPEN_BRACKET {
-            l := node_location_string(expr);
+            l := loc_string(expr);
             semantic_error(expr, "Expected a type here.\n\n%", l);
         }
 
@@ -652,13 +672,13 @@ evaluate_type_expression :: (expr: *Ast_Node) {
             root.datatype.enum_def = ident.datatype.enum_def;
 
             if root.datatype.bit_width == -1 {
-                semantic_error(ident, "Cannot create a circuit element based on an enum without a specific width:\n\n%\n\nUse `enum[N]` here:\n\n%", node_location_string(ident), node_location_string(ident.resolved_declaration.expression));
+                semantic_error(ident, "Cannot create a circuit element based on an enum without a specific width:\n\n%\n\nUse `enum[N]` here:\n\n%", loc_string(ident), loc_string(ident.declaration.expression));
             }
 
             assert(expr.datatype.enum_def != null);
         } else if op.right.datatype.primitive == .REGISTER {
             root.datatype.bit_width = op.right.datatype.bit_width;
-            assert(op.right.kind == .IDENTIFIER); // Todo error
+            assert(op.right.kind == .IDENTIFIER); // Todo: error
 
             ident := cast(*Ast_Identifier) op.right;
             assert(ident.datatype.register_def != null);
@@ -672,8 +692,11 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         typecheck_module(cast(*Ast_Module) expr);
         return;
 
-    } else if expr.kind == .MODULE_INSTANTIATION {
-        typecheck_module_instantiation(cast(*Ast_Module_Inst) expr);
+    } else if expr.kind == .IDENT_WITH_PARAMETERS {
+        ident := cast(*Ast_Ident_With_Parameters) expr;
+        resolve_identifier(ident.ident); // Todo: allow procedure calls that return types
+
+        typecheck_module_instantiation(ident);
         expr.datatype.primitive = .MODULE;
         return;
 
@@ -693,7 +716,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
     }
 
     if expr.kind != .IDENTIFIER {
-        l := node_location_string(expr);
+        l := loc_string(expr);
         semantic_error(expr, "Expected a type here.\n\n%", l);
     }
 
@@ -707,7 +730,7 @@ evaluate_type_expression :: (expr: *Ast_Node) {
         root.datatype.primitive = .WIRE;
 
       case;
-        semantic_error(expr, "name is not a type.\n\n%", node_location_string(ident));
+        semantic_error(expr, "name is not a type.\n\n%", loc_string(ident));
     }
 }
 
@@ -739,7 +762,7 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
                     if it.name == ident.name return it.value;
                 }
 
-                semantic_error(op, "Name '%' was not found in the enum:\n\n%\n\nDeclared here:\n\n%", ident.name, node_location_string(op.right), node_location_string(op.left.datatype.enum_def.decl));
+                semantic_error(op, "Name '%' was not found in the enum:\n\n%\n\nDeclared here:\n\n%", ident.name, loc_string(op.right), loc_string(op.left.datatype.enum_def.decl));
             }
 
             left := internal_evaluate(op.left);
@@ -761,21 +784,78 @@ evaluate_constant_expression :: (expr: *Ast_Node) -> int {
           case .IDENTIFIER;
             id := cast(*Ast_Identifier) expr;
 
-            prim := id.resolved_declaration.datatype.primitive;
+            prim := id.declaration.datatype.primitive;
             if prim == .MODULE || prim == .LATCH || prim == .WIRE || prim == .FLIPFLOP {
-                l1 := node_location_string(id);
-                l2 := node_location_string(id.resolved_declaration);
+                l1 := loc_string(id);
+                l2 := loc_string(id.declaration);
                 semantic_error(id, "This identifier was used in a constant expression, but refers to a circuit element:\n\n%\n\nDeclared here:\n\n%", l1, l2);
             }
 
-            if id.resolved_declaration.datatype.is_type {
-                semantic_error(id, "Expected a constant expression, but got a type name:\n\n%\n\nDeclared here:\n\n%", node_location_string(id), node_location_string(id.resolved_declaration));
+            if id.declaration.datatype.is_type {
+                semantic_error(id, "Expected a constant expression, but got a type name:\n\n%\n\nDeclared here:\n\n%", loc_string(id), loc_string(id.declaration));
             }
 
-            return internal_evaluate(id.resolved_declaration.expression);
+            return internal_evaluate(id.declaration.expression);
+
+          case .IDENT_WITH_PARAMETERS;
+            ident := cast(*Ast_Ident_With_Parameters) expr;
+            resolve_identifier(ident.ident);
+
+            if ident.ident.declaration.expression.kind == .MODULE {
+                semantic_error(ident, "Modules cannot be referenced in constant expressions:\n\n%\n\nDeclared here:\n\n%", loc_string(ident), loc_string(ident.ident.declaration));
+            }
+
+            assert(ident.ident.declaration.expression.kind == .JAI_CODE);
+
+            jai := cast(*Ast_Jai_Code) ident.ident.declaration.expression;
+            arg := evaluate_constant_expression(ident.parameters[0]);
+
+            if !#compile_time return 100;
+
+            {
+                cwd := get_working_directory();
+                dir := tprint("%/compiled", cwd);
+                make_directory_if_it_does_not_exist(dir);
+
+                filename := tprint("%/%", dir, ident.ident.name);
+
+                if !file_exists(filename) {
+                    // Todo invalidate cached exe using procedure body text
+                    ws := compiler_create_workspace(
+                        tprint("Executing Jai function '%'", ident.ident.declaration.name)
+                    );
+
+                    options := get_build_options(ws);
+                    options.output_type = .EXECUTABLE;
+                    options.output_path = dir;
+                    options.output_executable_name = ident.ident.declaration.name;
+                    set_build_options(options, ws);
+
+                    compiler_begin_intercept(ws);
+
+                    add_build_string(jai.code, ws);
+                    program := tprint("#import \"Basic\"; main :: () { exit(cast(s32) %(%)); }", ident.ident.declaration.name, arg);
+                    add_build_string(program, ws);
+
+                    while true {
+                        m := compiler_wait_for_message();
+                        if m.kind == .COMPLETE break;
+
+                        if m.kind == .ERROR {
+                            semantic_error(jai, "A Jai compiler error was caused by this code:\n\n%", loc_string(jai));
+                            break;
+                        }
+                    }
+
+                    compiler_end_intercept(ws);
+                }
+
+                process_result := run_command(filename);
+                return process_result.exit_code;
+            }
         }
 
-        semantic_error(expr, "Expected a constant expression, but this can't be constant-evaluated:\n\n%\n", node_location_string(expr));
+        semantic_error(expr, "Expected a constant expression, but this can't be constant-evaluated:\n\n%\n", loc_string(expr));
         return 0;
     }
 
@@ -802,6 +882,11 @@ resolve_identifier :: (id: *Ast_Identifier) {
                 decl := cast(*Ast_Declaration) it;
                 if decl.name == name return decl;
             }
+
+            if it.kind == .JAI_CODE {
+                jai := cast(*Ast_Jai_Code) it;
+                for jai.declarations if it.name == name return it;
+            }
         }
 
         if block.parent {
@@ -813,13 +898,61 @@ resolve_identifier :: (id: *Ast_Identifier) {
 
     decl := search_in_block(context.typechecker.current_block, id.name);
     if !decl {
-        semantic_error(id, "Undeclared identifier '%', referenced here:\n\n%", id.name, node_location_string(id));
+        semantic_error(id, "Undeclared identifier '%', referenced here:\n\n%", id.name, loc_string(id));
     }
 
     typecheck_declaration(decl);
     id.datatype = decl.datatype;
 
-    id.resolved_declaration = decl;
+    id.declaration = decl;
+}
+
+typecheck_jai_code :: (jai: *Ast_Jai_Code) {
+    if !#compile_time return; // Todo
+
+    ws := compiler_create_workspace(
+        tprint("'jai' block at line %", jai.location.line+1)
+    );
+
+    options := get_build_options(ws);
+    options.output_type = .NO_OUTPUT;
+    set_build_options(options, ws);
+
+    compiler_begin_intercept(ws);
+
+    add_build_string(jai.code, ws);
+
+    exported: [..] *Ast_Declaration;
+
+    while true {
+        m := compiler_wait_for_message();
+        if m.kind == .COMPLETE break;
+
+        if m.kind == .ERROR {
+            semantic_error(jai, "A Jai compiler error was caused by this code:\n\n%", loc_string(jai));
+            break;
+        }
+
+        if m.kind == .TYPECHECKED {
+            t := cast(*Message_Typechecked) m;
+
+            for t.declarations if !(it.expression.flags & .IS_IMPORTED) {
+                // TODO This doesn't skip declarations from Runtime_Support and Preload
+
+                decl := Make_Ast(Ast_Declaration);
+                decl.name = it.expression.name;
+                decl.location = jai.location; // Todo get the exact location
+                decl.expression = jai;
+                decl.constant = true;
+                decl.typechecked = true;
+
+                array_add(*exported, decl);
+            }
+        }
+    }
+
+    jai.declarations = exported;
+    compiler_end_intercept(ws);
 }
 
 Walk_Expression :: (expr: *Ast_Node, $code: Code, $deferred: Code = #code {}, user_data: *$T = null) {
@@ -905,10 +1038,9 @@ semantic_error :: (ast: *Ast_Node, report: string, format: .. Any) {
     exit(1);
 }
 
-node_location_string :: (node: *Ast_Node) -> string {
-    loc := node.location;
-
+loc_string :: (loc: Source_Location) -> string {
     file := table_find_pointer(*context.typechecker.program.files, loc.filename);
+
     assert(file != null);
     line := file.lines[loc.line];
 

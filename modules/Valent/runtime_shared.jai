@@ -9,7 +9,7 @@ Ast_Node :: struct {
         UNARY_OP;
         LITERAL;
         MODULE;
-        MODULE_INSTANTIATION;
+        IDENT_WITH_PARAMETERS;
         ENUM;
         REGISTER;
         MEMORY;
@@ -26,7 +26,7 @@ Ast_Node :: struct {
     }
 
     kind: Kind;
-    location: Source_Location;
+    #as location: Source_Location;
 
     datatype: Datatype;
     typechecked: bool;
@@ -62,6 +62,8 @@ Ast_Jai_Code :: struct {
     }
 
     code: string;
+
+    declarations: [] *Ast_Declaration;
 }
 
 Ast_Block :: struct {
@@ -78,7 +80,7 @@ Ast_Identifier :: struct {
     node.kind = .IDENTIFIER;
 
     name: string;
-    resolved_declaration: *Ast_Declaration;
+    declaration: *Ast_Declaration;
 }
 
 Ast_Literal :: struct {
@@ -168,14 +170,13 @@ Ast_Module :: struct {
     outputs: [] *Ast_Declaration;
 }
 
-Ast_Module_Inst :: struct {
+Ast_Ident_With_Parameters :: struct {
     using #as node: Ast_Node;
-    node.kind = .MODULE_INSTANTIATION;
+    node.kind = .IDENT_WITH_PARAMETERS;
 
     ident: *Ast_Identifier;
 
-    inputs: [..] Ast_Identifier;
-    outputs: [..] Ast_Identifier;
+    parameters: [..] *Ast_Node;
 }
 
 Ast_Memory :: struct {

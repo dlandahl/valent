@@ -4,7 +4,7 @@
 assert :: (arg: bool, message := "", args: .. Any, loc := #caller_location) #no_debug #expand {
     if !arg {
         if context.typechecker.current_block {
-            print("\n(In block): %\n", node_location_string(context.typechecker.current_block));
+            // print("\n(In block): %\n", loc_string(context.typechecker.current_block));
         }
 
         assert_helper(message, ..args, loc);
@@ -211,21 +211,8 @@ parse :: (file: Tokenized_Source_File, top_level: *Ast_Block) {
                 print("Error: Wanted %, got %.\n", stringify_token(parser.wanted[0]), stringify_token(parser.got));
             }
 
-            loc := context.parser.error_location;
-            line := file.lines[loc.line];
-
-            first := line;
-            first.count = loc.start_char;
-
-            second := line;
-            second.data += loc.start_char;
-            second.count = loc.end_char - loc.start_char;
-
-            third := line;
-            third.data += loc.end_char;
-            third.count -= loc.end_char;
-
-            print("\n(line %): %[31m%[0m%\n", loc.line, first, second, third);
+            print("\n%\n\n", loc_string(parser.error_location));
+            break;
         }
     }
 
@@ -253,6 +240,8 @@ parse_statement :: () -> *Ast_Node {
 
         using context.parser;
         parse_error("Expected this expression to be an assignment or a declaration, but it was followed by a token of kind %", stringify_token(tokens[token_index+1].kind));
+
+        print("Ident: %\n", tokens[token_index].start_char);
 
         return null;
     }
@@ -325,14 +314,13 @@ parse_statement :: () -> *Ast_Node {
     if allow(.KEYWORD_jai) {
         braced := allow(.OPEN_BRACE);
 
-        jai := Make_Ast(Ast_Jai_Code);
         expect(.JAI_CODE);
+        jai := Make_Ast(Ast_Jai_Code);
 
         jai.block_type = .STATIC;
         jai.code = current_token().string_value;
 
         if braced expect(.CLOSED_BRACE);
-        else expect(.SEMICOLON);
 
         return jai;
     }
@@ -566,39 +554,23 @@ parse_atom :: () -> *Ast_Node {
         ident.name = current_token().string_value;
 
         if peek(.OPEN_PAREN) {
-            module := Make_Ast(Ast_Module_Inst);
-            module.ident = ident;
+            thing := Make_Ast(Ast_Ident_With_Parameters);
+            thing.ident = ident;
 
             expect(.OPEN_PAREN);
 
-            while allow(.IDENTIFIER) {
-                ident := array_add(*module.inputs);
-                ident.*.name = current_token().string_value;
-                ident.*.location = current_token().location;
+            if !allow(.CLOSED_PAREN) while true {
+                expr := parse_expression();
+                array_add(*thing.parameters, expr);
                 if !allow(.COMMA) break;
             }
 
             expect(.CLOSED_PAREN);
 
-            if allow(.ARROW) {
-                started_with_paren := allow(.OPEN_PAREN);
-
-                while allow(.IDENTIFIER) {
-                    ident := array_add(*module.outputs);
-                    ident.*.name = current_token().string_value;
-                    ident.*.location = current_token().location;
-                    if !allow(.COMMA) break;
-                }
-
-                if started_with_paren {
-                    expect(.CLOSED_PAREN);
-                }
-            }
-
-            return module;
+            atom = thing;
         }
 
-        atom = ident;
+        else atom = ident;
     }
 
     else if allow(.INTEGER) {
@@ -1011,14 +983,17 @@ tokenize :: (source_file: Source_File) -> Tokenized_Source_File {
 
             Jai.set_input_from_string(*lexer, lexer_input);
             brace_level: int;
+            entered_block: bool;
 
             while true {
                 token := Jai.peek_next_token(*lexer);
 
                 if token.type == {
                     case #char "{"; brace_level += 1;
+                      entered_block = true;
                     case #char "}"; brace_level -= 1;
-                    case .END_OF_INPUT; assert(false); // Todo
+                    case .END_OF_INPUT;
+                      assert(false); // Todo
                     case .ERROR; assert(false); // Todo
                     case #char ";"; if !starts_with_brace && brace_level == 0 {
                         Jai.eat_token(*lexer);
@@ -1026,9 +1001,11 @@ tokenize :: (source_file: Source_File) -> Tokenized_Source_File {
                     }
                 }
 
-                if brace_level < 0 break;
-
                 Jai.eat_token(*lexer);
+
+                if brace_level < 0 break;
+                // if entered_block && brace_level == 0 break;
+
             }
 
             jai_code := lexer_input;
@@ -1037,10 +1014,11 @@ tokenize :: (source_file: Source_File) -> Tokenized_Source_File {
             jai_code_token: Token;
             jai_code_token.kind = .JAI_CODE;
             jai_code_token.string_value = jai_code;
-            // Todo fixup source location
+
+            jai_code_token.location = token.location;
             array_add(*output_token_stream, jai_code_token);
 
-            // Todo fixup line numbers
+            tokenizer.line   += lexer.current_line_number - 1;
             tokenizer.cursor += jai_code.count;
         }
     }
@@ -1237,7 +1215,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
 
             if is_num(current()) {
                 start = cursor;
-                while is_num(current()) {
+                while is_num(current()) || current() == #char "_" {
                     cursor += 1;
                 }
                 end = cursor;

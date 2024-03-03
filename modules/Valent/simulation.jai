@@ -48,7 +48,7 @@ build_wire_dag :: (top: *Ast_Declaration) {
                 ident := cast(*Ast_Identifier) expr;
 
                 for wires {
-//                    if it.decl == ident.resolved_declaration
+//                    if it.decl == ident.declaration
                 }
 
             }, user_data = user_data);

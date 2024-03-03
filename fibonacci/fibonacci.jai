@@ -16,21 +16,22 @@ Uart_Control :: union {
 }
 
 #program_export
-main :: () {
+main :: () #c_call {
     while true {
         byte := cast,trunc(u8) MMIO_SWITCHES.*;
 
         flags := MMIO_UART.flags;
         while !(flags & .READY) {
-            flags = MMIO_UART.flags;
+            llvm_memcpy(*flags, MMIO_UART, 8, true);
+            // flags = MMIO_UART.flags;
         }
 
-        MMIO_UART.* = .{
-            byte = byte,
-            flags = .EXECUTE,
-        };
+        message := byte | (1 << 9);
+        llvm_memcpy(MMIO_UART, *message, 8, true);
     }
 }
+
+llvm_memcpy :: (dest: *void, src: *void, len: s64, is_volatile: bool) #intrinsic "llvm.memcpy.inline.p0.p0.i64";
 
 // #program_export __muldi3 :: () {}
 #program_export memset :: () {}
@@ -40,7 +41,7 @@ END;
 
 #run build();
 
-UART_TEST :: true;
+UART_TEST :: false;
 
 #assert OS == .LINUX;
 
@@ -91,11 +92,11 @@ build :: () {
         run("riscv64-unknown-elf-objcopy -O binary .build/linked.o .build/result.bin");
     }
 
-    binary := cast([] u8) read_entire_file(".build/linked.bin");
+    binary := cast([] u8) read_entire_file(".build/result.bin");
     hex_data := format_hex_words(binary);
 
     write_entire_file("program.mem", hex_data);
-    run("riscv64-unknown-elf-objdump -D .build/linked.o");
+    run("riscv64-unknown-elf-objdump --disassemble=main .build/linked.o");
 
     set_build_options_dc(.{do_output = false});
 }

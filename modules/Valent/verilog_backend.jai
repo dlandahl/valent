@@ -60,7 +60,7 @@ generate_module :: (decl: *Ast_Declaration) {
         if it.kind != .DECLARATION continue;
 
         decl := cast(*Ast_Declaration) it;
-        if decl.expression.kind == .MODULE_INSTANTIATION continue;
+        if decl.expression.datatype.primitive == .MODULE continue;
 
         generate_statement(it);
     }
@@ -69,10 +69,10 @@ generate_module :: (decl: *Ast_Declaration) {
         if it.kind != .DECLARATION continue;
 
         decl := cast(*Ast_Declaration) it;
-        if decl.expression.kind == .MODULE_INSTANTIATION {
-            instance := cast(*Ast_Module_Inst) decl.expression;
+        if decl.expression.datatype.primitive == .MODULE {
+            instance := cast(*Ast_Ident_With_Parameters) decl.expression;
 
-            source := cast(*Ast_Declaration) instance.ident.resolved_declaration;
+            source := cast(*Ast_Declaration) instance.ident.declaration;
 
             module := cast(*Ast_Module) source.expression;
 
@@ -81,32 +81,33 @@ generate_module :: (decl: *Ast_Declaration) {
             }
 
             for module.inputs {
-                if it_index < instance.inputs.count continue;
-
-                write_verilog("reg ");
-                write_bus_width(it);
-                write_verilog("%__%;\n", decl.name, it.name);
+                if it_index >= instance.parameters.count {
+                    write_verilog("reg ");
+                    write_bus_width(it);
+                    write_verilog("%__%;\n", decl.name, it.name);
+                }
             }
 
             for module.outputs {
-                if it_index < instance.outputs.count continue;
-
-                write_verilog("wire ");
-                write_bus_width(it);
-                write_verilog("%__%;\n", decl.name, it.name);
+                if module.inputs.count + it_index >= instance.parameters.count {
+                    write_verilog("wire ");
+                    write_bus_width(it);
+                    write_verilog("%__%;\n", decl.name, it.name);
+                }
             }
 
             write_verilog("% %(", instance.ident.name, decl.name);
 
-            for instance.inputs {
-                write_verilog(it.name);
+            for instance.parameters {
+                ident := cast(*Ast_Identifier) it;
+                write_verilog(ident.name);
                 if it_index != module.inputs.count-1 || module.outputs.count {
                     write_verilog(", ");
                 }
             }
 
             for module.inputs {
-                if it_index < instance.inputs.count continue;
+                if it_index < instance.parameters.count continue;
 
                 write_verilog("%__%", decl.name, it.name);
                 if it_index != module.inputs.count-1 || module.outputs.count {
@@ -114,13 +115,8 @@ generate_module :: (decl: *Ast_Declaration) {
                 }
             }
 
-            for instance.outputs {
-                write_verilog(it.name);
-                if it_index != module.outputs.count-1 write_verilog(", ");
-            }
-
             for module.outputs {
-                if it_index < instance.outputs.count continue;
+                if it_index < module.inputs.count + instance.parameters.count continue;
 
                 write_verilog("%__%", decl.name, it.name);
                 if it_index != module.outputs.count-1 write_verilog(", ");
@@ -383,7 +379,7 @@ generate_expression :: (expr: *Ast_Node, bit_select_active := false) -> int {
       case .IDENTIFIER;
         id := cast(*Ast_Identifier) expr;
 
-        if id.resolved_declaration.constant {
+        if id.declaration.constant {
             write_verilog("%", evaluate_constant_expression(id));
         } else {
             write_verilog(id.name);

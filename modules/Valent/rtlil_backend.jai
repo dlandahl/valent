@@ -224,7 +224,7 @@ generate_expression :: (expr: *Ast_Node) -> *Rtlil_Signal {
       case .IDENTIFIER;
         ident := cast(*Ast_Identifier) expr;
 
-        if ident.resolved_declaration.constant {
+        if ident.declaration.constant {
             return rtlil_constant(xx evaluate_constant_expression(ident), 32);
         }
 

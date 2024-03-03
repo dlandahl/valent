@@ -36,6 +36,7 @@ Tokenized_Source_File :: struct {
 
 compile :: (files: .. Source_File) -> Program, bool {
     p: Program;
+    context.typechecker.program = *p;
 
     top_level := Make_Ast(Ast_Block);
     top_level.block_type = .TOP_LEVEL;
@@ -45,14 +46,13 @@ compile :: (files: .. Source_File) -> Program, bool {
 
         tokenized := tokenize(it);
 
-        parse(tokenized, top_level);
-
         table_add(*p.files, it.name, tokenized);
+
+        parse(tokenized, top_level);
 
         if context.parser.error return .{}, false;
     }
 
-    context.typechecker.program = *p;
     typecheck_block(top_level);
 
     p.ast = top_level;
