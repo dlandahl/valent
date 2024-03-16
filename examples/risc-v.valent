@@ -1,5 +1,5 @@
 
-RiscV_Instruction :: register[32] {
+RiscV_Instruction :: bit_struct[32] {
     opcode    [Opcode];
     dest      [5];
     funct3    [Funct];
@@ -9,12 +9,12 @@ RiscV_Instruction :: register[32] {
 }
 
 // PR = Pipeline Register
-PR_Fetch_Decode :: register {
+PR_Fetch_Decode :: bit_struct {
     stalled;
     fetched [RiscV_Instruction];
 }
 
-PR_Decode_Execute :: register {
+PR_Decode_Execute :: bit_struct {
     stalled;
     instruction [RiscV_Instruction];
 
@@ -23,7 +23,28 @@ PR_Decode_Execute :: register {
     source_b  [64];
 }
 
-Processor :: module (clock: wire, instruction: wire[64], data: wire[64]) -> pc: flipflop[64] {
+PR_Execute_Memory :: bit_struct {
+    instruction [RiscV_Instruction];
+    alu_result  [64];
+    source_b    [64];
+}
+
+PR_Memory_Writeback :: bit_struct {
+    instruction [RiscV_Instruction];
+    alu_result  [64];
+    source_b    [64];
+}
+
+Processor :: module (
+    clock: wire,
+    instruction: wire[64],
+    data: wire[64]
+) -> (
+    pc: flipflop[64],
+    write_enable: wire[8],
+    data_out: wire[64],
+    address: wire[64],
+) {
 
     register_file: [32] memory[64];
 
@@ -50,22 +71,21 @@ Processor :: module (clock: wire, instruction: wire[64], data: wire[64]) -> pc: 
     // ===============
 
     alu: Arithmetic_Logic_Unit;
-    prde_inst: wire[RiscV_Instruction];
 
     combinational {
-        prde_inst = PR_decode_execute.instruction;
+        inst := PR_decode_execute.instruction;
 
         use_immediate =
-               prde_inst.opcode == Opcode.OP_IMM
-            || prde_inst.opcode == Opcode.OP_IMM_32
-            || prde_inst.opcode == Opcode.LOAD
-            || prde_inst.opcode == Opcode.STORE
-            || prde_inst.opcode == Opcode.JALR;
+               inst.opcode == Opcode.OP_IMM
+            || inst.opcode == Opcode.OP_IMM_32
+            || inst.opcode == Opcode.LOAD
+            || inst.opcode == Opcode.STORE
+            || inst.opcode == Opcode.JALR;
 
         alu.op = {
-            prde_inst.opcode,
-            prde_inst.funct3,
-            prde_inst.funct7 != 0 && !use_immediate,
+            inst.opcode,
+            inst.funct3,
+            inst.funct7 != 0 && !use_immediate,
         };
 
         alu.lhs = PR_decode_execute.source_a;
@@ -78,38 +98,59 @@ Processor :: module (clock: wire, instruction: wire[64], data: wire[64]) -> pc: 
     }
 
     sequential (clock) {
-        PR_execute_memory <- alu.result;
+        PR_execute_memory <- {
+            alu.result,
+            PR_decode_execute.instruction,
+            PR_decode_execute.source_b,
+        };
     }
 
     // ===============
-    PR_execute_memory: flipflop[64];
+    PR_execute_memory: flipflop[PR_Execute_Memory];
     // ===============
 
+    byte_offset: wire[3];
+    offset:      wire[6];
+
+    combinational {
+        write_enable = 8'b0;
+
+        byte_offset = PR_execute_memory.alu_result[2:0];
+        offset      = byte_offset * 8;
+
+        if PR_execute_memory.instruction.opcode == Opcode.STORE {
+            switch PR_execute_memory.instruction.funct3 {
+                case Funct.STORE_SB write_enable = 8'b01 << byte_offset;
+                case Funct.STORE_SH write_enable = 8'b11 << byte_offset;
+                case Funct.STORE_SW write_enable = 8'h0f << byte_offset;
+                else                write_enable = 8'hff;
+            }
+        }
+
+        address  = { PR_execute_memory.alu_result[63:3], 3'b0 };
+        data_out = PR_execute_memory.source_b << offset;
+    }
+
+    sequential (clock) {
+        PR_memory_writeback <- PR_execute_memory;
+    }
+
     // ===============
-    PR_memory_writeback: flipflop[RiscV_Instruction];
+    PR_memory_writeback: flipflop[PR_Memory_Writeback];
     // ===============
 }
 
 
 
-Immediate_Decoder :: module (instruction: wire[RiscV_Instruction]) -> output: wire[64] {
-
-    I_immediate: wire[64];
-    S_immediate: wire[64];
-    B_immediate: wire[64];
-    U_immediate: wire[64];
-    J_immediate: wire[64];
-
-    op: wire[32];
+Immediate_Decoder :: module (inst: wire[RiscV_Instruction]) -> output: wire[64] {
 
     combinational {
-        op = instruction;
 
-        I_immediate = { 53 # op[31], op[30:20] };
-        S_immediate = { 53 # op[31], op[30:25], op[11:7] };
-        B_immediate = { 52 # op[31], op[7], op[30:25], op[11:8], 1'b0 };
-        U_immediate = { 33 # op[31], op[30:12], 12'b0 };
-        J_immediate = { 44 # op[31], op[19:12], op[20], op[30:25], op[24:21], 1'b0 };
+        I_immediate := { 53 # inst[31], inst[30:20] };
+        S_immediate := { 53 # inst[31], inst[30:25], inst[11:7] };
+        B_immediate := { 52 # inst[31], inst[7], inst[30:25], inst[11:8], 1'b0 };
+        U_immediate := { 33 # inst[31], inst[30:12], 12'b0 };
+        J_immediate := { 44 # inst[31], inst[19:12], inst[20], inst[30:25], inst[24:21], 1'b0 };
 
         switch instruction.opcode {
             case Opcode.AUIPC     output = U_immediate;
@@ -130,14 +171,14 @@ Immediate_Decoder :: module (instruction: wire[RiscV_Instruction]) -> output: wi
 
 Arithmetic_Logic_Unit :: module (op: wire[Operation], lhs: wire[64], rhs: wire[64]) -> result: wire[64] {
 
-    Operation :: register {
+    Operation :: bit_struct {
         opcode [Opcode];
         funct3 [3]
         funct7;
     }
 
     is_op:     wire;
-    is_branch  wire;
+    is_branch: wire;
 
     combinational {
         is_op = op.opcode == Opcode.OP
