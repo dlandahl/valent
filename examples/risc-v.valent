@@ -10,12 +10,12 @@ RiscV_Instruction :: bit_struct[32] {
 
 // PR = Pipeline Register
 PR_Fetch_Decode :: bit_struct {
-    stalled;
-    fetched [RiscV_Instruction];
+    stall;
+    instruction [RiscV_Instruction];
 }
 
 PR_Decode_Execute :: bit_struct {
-    stalled;
+    stall;
     instruction [RiscV_Instruction];
 
     immediate [64];
@@ -24,13 +24,17 @@ PR_Decode_Execute :: bit_struct {
 }
 
 PR_Execute_Memory :: bit_struct {
+    stall;
     instruction [RiscV_Instruction];
+
     alu_result  [64];
     source_b    [64];
 }
 
 PR_Memory_Writeback :: bit_struct {
+    stall;
     instruction [RiscV_Instruction];
+
     alu_result  [64];
     source_b    [64];
 }
@@ -48,22 +52,28 @@ Processor :: module (
 
     register_file: [32] memory[64];
 
+    flush: wire;
+
     sequential (clock) {
         pc <- pc + 4;
-        PR_fetch_decode.fetched <- instruction;
+        PR_fetch_decode.instruction <- instruction;
+        PR_fetch_decode.stall <- flush;
     }
 
     // ===============
     PR_fetch_decode: flipflop[PR_Fetch_Decode];
     // ===============
 
-    imdec: Immediate_Decoder(PR_fetch_decode.fetched);
+    imdec: Immediate_Decoder(PR_fetch_decode.instruction);
 
     sequential (clock) {
-        PR_decode_execute.immediate <- imdec.output;
+        PR_decode_execute.immediate   <- imdec.output;
 
-        PR_decode_execute.source_a  <- register_file[PR_fetch_decode.fetched.source_a];
-        PR_decode_execute.source_b  <- register_file[PR_fetch_decode.fetched.source_b];
+        PR_decode_execute.source_a    <- register_file[PR_fetch_decode.instruction.source_a];
+        PR_decode_execute.source_b    <- register_file[PR_fetch_decode.instruction.source_b];
+
+        PR_decode_execute.stall       <- PR_fetch_decode.stall || flush;
+        PR_decode_execute.instruction <- PR_fetch_decode.instruction;
     }
 
     // ===============
@@ -99,8 +109,9 @@ Processor :: module (
 
     sequential (clock) {
         PR_execute_memory <- {
-            alu.result,
+            PR_decode_execute.stall || flush;
             PR_decode_execute.instruction,
+            alu.result,
             PR_decode_execute.source_b,
         };
     }
@@ -118,12 +129,14 @@ Processor :: module (
         byte_offset = PR_execute_memory.alu_result[2:0];
         offset      = byte_offset * 8;
 
-        if PR_execute_memory.instruction.opcode == Opcode.STORE {
-            switch PR_execute_memory.instruction.funct3 {
-                case Funct.STORE_SB write_enable = 8'b01 << byte_offset;
-                case Funct.STORE_SH write_enable = 8'b11 << byte_offset;
-                case Funct.STORE_SW write_enable = 8'h0f << byte_offset;
-                else                write_enable = 8'hff;
+        if !PR_execute_memory.stall {
+            if PR_execute_memory.instruction.opcode == Opcode.STORE {
+                switch PR_execute_memory.instruction.funct3 {
+                    case Funct.STORE_SB write_enable = 8'b01 << byte_offset;
+                    case Funct.STORE_SH write_enable = 8'b11 << byte_offset;
+                    case Funct.STORE_SW write_enable = 8'h0f << byte_offset;
+                    else                write_enable = 8'hff;
+                }
             }
         }
 
@@ -133,6 +146,7 @@ Processor :: module (
 
     sequential (clock) {
         PR_memory_writeback <- PR_execute_memory;
+        PR_memory_writeback.stall <- PR_execute_memory.stall || flush;
     }
 
     // ===============
@@ -177,18 +191,13 @@ Arithmetic_Logic_Unit :: module (op: wire[Operation], lhs: wire[64], rhs: wire[6
         funct7;
     }
 
-    is_op:     wire;
-    is_branch: wire;
-
     combinational {
-        is_op = op.opcode == Opcode.OP
-             || op.opcode == Opcode.OP_IMM
-             || op.opcode == Opcode.OP_32
-             || op.opcode == Opcode.OP_IMM_32;
+        is_op := op.opcode == Opcode.OP
+              || op.opcode == Opcode.OP_IMM
+              || op.opcode == Opcode.OP_32
+              || op.opcode == Opcode.OP_IMM_32;
 
-        is_branch = op.opcode == Opcode.BRANCH;
-
-        // funct7 = op.funct7 > 0 && !use_immediate;
+        is_branch := op.opcode == Opcode.BRANCH;
 
         if is_op switch op.funct3 {
             case Funct.OP_ADD_SUB
@@ -218,4 +227,55 @@ Arithmetic_Logic_Unit :: module (op: wire[Operation], lhs: wire[64], rhs: wire[6
 
         else result =,trunc lhs + rhs;
     }
+}
+
+
+
+
+
+
+
+Opcode :: enum[7] {
+    AUIPC     :: 'b00_101_11;
+    LUI       :: 'b01_101_11;
+    LOAD      :: 'b00_000_11;
+    STORE     :: 'b01_000_11;
+    OP_IMM    :: 'b00_100_11;
+    OP        :: 'b01_100_11;
+    OP_IMM_32 :: 'b00_110_11;
+    OP_32     :: 'b01_110_11;
+    BRANCH    :: 'b11_000_11;
+    JALR      :: 'b11_001_11;
+    JAL       :: 'b11_011_11;
+}
+
+Funct :: enum[3] {
+    OP_ADD_SUB  :: 'b000;
+    OP_SLL      :: 'b001;
+    OP_SLT      :: 'b010;
+    OP_SLTU     :: 'b011;
+    OP_XOR      :: 'b100;
+    OP_SRL_SRA  :: 'b101;
+    OP_OR       :: 'b110;
+    OP_AND      :: 'b111;
+
+    BRANCH_BEQ  :: 'b000;
+    BRANCH_BNE  :: 'b001;
+    BRANCH_BLT  :: 'b100;
+    BRANCH_BGE  :: 'b101;
+    BRANCH_BLTU :: 'b110;
+    BRANCH_BGEU :: 'b111;
+
+    LOAD_LB     :: 'b000;
+    LOAD_LH     :: 'b001;
+    LOAD_LW     :: 'b010;
+    LOAD_LD     :: 'b011;
+    LOAD_LBU    :: 'b100;
+    LOAD_LHU    :: 'b101;
+    LOAD_LWU    :: 'b110;
+
+    STORE_SB    :: 'b000;
+    STORE_SH    :: 'b001;
+    STORE_SW    :: 'b010;
+    STORE_SD    :: 'b011;
 }
