@@ -35,6 +35,8 @@ PR_Memory :: register {
     immediate   [64];
     alu_result  [64];
     source_b    [64];
+
+    offset      [6];
 }
 
 Processor :: module (
@@ -49,7 +51,8 @@ Processor :: module (
 ) {
 
     register_file: [32] memory[64];
-    // There's no data bypassing logic. Stall whenever a dependent register is in flight.
+
+    // There's no data bypassing. Stall whenever a dependent register is in flight.
     in_flight: flipflop[32];
 
     flush: wire;
@@ -76,7 +79,7 @@ Processor :: module (
 
     sequential (clock) {
         pr_decode.immediate   <- imdec.output;
-
+ 
         pr_decode.source_a    <- register_file[pr_fetch.instruction.source_a];
         pr_decode.source_b    <- register_file[pr_fetch.instruction.source_b];
 
@@ -175,33 +178,40 @@ Processor :: module (
     }
 
     sequential (clock) {
-        dest := pr_execute.instruction.dest;
+        pr_memory <- {
+            pr_execute,
+            offset,
+        };
+    }
 
-        switch (pr_execute.instruction.opcode) {
-            case Opcode.OP        register_file[dest] <- pr_execute.alu;
-            case Opcode.OP_IMM    register_file[dest] <- pr_execute.alu;
-            case Opcode.OP_32     register_file[dest] <- { 32 # pr_execute.alu[31], pr_execute.alu[31:0] };
-            case Opcode.OP_IMM_32 register_file[dest] <- { 32 # pr_execute.alu[31], pr_execute.alu[31:0] };
+    // ===============
+    // Writeback
+    // ===============
+
+    sequential (clock) {
+        dest := pr_memory.instruction.dest;
+
+        switch (pr_memory.instruction.opcode) {
+            case Opcode.OP        register_file[dest] <- pr_memory.alu;
+            case Opcode.OP_IMM    register_file[dest] <- pr_memory.alu;
+            case Opcode.OP_32     register_file[dest] <- { 32 # pr_memory.alu[31], pr_memory.alu[31:0] };
+            case Opcode.OP_IMM_32 register_file[dest] <- { 32 # pr_memory.alu[31], pr_memory.alu[31:0] };
             case Opcode.LUI       register_file[dest] <- pr_excute.immediate;
             case Opcode.AUIPC     register_file[dest] <-,trunc pr_excute.immediate + pc;
         }
 
-        if pr_execute.instruction.opcode == Opcode.LOAD switch pr_execute.instruction.funct3 {
-            case Funct.LOAD_LB  register_file[dest] <- { 56 # data[8  + offset +: 1], data[offset +: 8]  };
-            case Funct.LOAD_LH  register_file[dest] <- { 48 # data[16 + offset +: 1], data[offset +: 16] };
-            case Funct.LOAD_LW  register_file[dest] <- { 32 # data[32 + offset +: 1], data[offset +: 32] };
+        if pr_memory.instruction.opcode == Opcode.LOAD switch pr_memory.instruction.funct3 {
+            case Funct.LOAD_LB  register_file[dest] <- { 56 # data[8  + pr_memory.offset +: 1], data[pr_memory.offset +: 8]  };
+            case Funct.LOAD_LH  register_file[dest] <- { 48 # data[16 + pr_memory.offset +: 1], data[pr_memory.offset +: 16] };
+            case Funct.LOAD_LW  register_file[dest] <- { 32 # data[32 + pr_memory.offset +: 1], data[pr_memory.offset +: 32] };
             case Funct.LOAD_LD  register_file[dest] <- data;
-            case Funct.LOAD_LBU register_file[dest] <- { 56'b0, data[offset +: 8] };
-            case Funct.LOAD_LHU register_file[dest] <- { 48'b0, data[offset +: 16] };
-            case Funct.LOAD_LWU register_file[dest] <- { 32'b0, data[offset +: 32] };
+            case Funct.LOAD_LBU register_file[dest] <- { 56'b0, data[pr_memory.offset +: 8] };
+            case Funct.LOAD_LHU register_file[dest] <- { 48'b0, data[pr_memory.offset +: 16] };
+            case Funct.LOAD_LWU register_file[dest] <- { 32'b0, data[pr_memory.offset +: 32] };
         }
-
-        in_flight[dest] <- 0;
     }
 
-    sequential (clock) {
-        pr_memory <- pr_execute;
-    }
+     // in_flight[dest] <- 0; // Todo
 }
 
 
